@@ -3,6 +3,7 @@ import { useController, useEmulatorState } from '../emulator/context';
 import {
   memberLabel,
   refundLabel,
+  cardLine,
   saleRefundable,
   saleStatusLabel,
   type StoredSaleUi,
@@ -39,6 +40,13 @@ function SalesListCard({
                   <span className="small">{sale.completedAtLabel}</span>
                 </span>
                 <span className="small">{saleStatusLabel(sale)}</span>
+                {sale.cardPayments.length > 1
+                  ? sale.cardPayments.map((card, index) => (
+                      <span key={card.poiTransactionId} className="small">
+                        {cardLine(index, card)}
+                      </span>
+                    ))
+                  : null}
               </button>
             </li>
           ))}
@@ -61,6 +69,14 @@ function RefundDetailsCard({ sale }: { sale: StoredSaleUi }): ReactNode {
   const fullAvailable = sale.fullRefundAvailable;
   const [mode, setMode] = useState<RefundMode>(fullAvailable ? 'FULL' : 'ITEMS');
   const [selectedSkus, setSelectedSkus] = useState<ReadonlySet<string>>(new Set());
+  // A return restores to one card payment: with several still standing, the cashier picks which.
+  // a card drawn down to nothing by earlier returns has no capacity to take another
+  const hasCapacity = (card: StoredSaleUi['cardPayments'][number]) =>
+    !card.refunded && card.remainingMinor !== 0;
+  const standingCards = sale.cardPayments.filter(hasCapacity);
+  const [pickedCard, setPickedCard] = useState<string | null>(null);
+  const cardChoice =
+    standingCards.find((card) => card.poiTransactionId === pickedCard) ?? standingCards[0] ?? null;
   const hasRecordedItems = sale.items.length > 0;
   const itemsAvailable = hasRecordedItems && !sale.hasGiftCardPurchase;
   const refundable = saleRefundable(sale);
@@ -113,6 +129,19 @@ function RefundDetailsCard({ sale }: { sale: StoredSaleUi }): ReactNode {
       ) : null}
       {notice ? (
         <p className={`small ${sale.voided || sale.fullyRefunded ? 'error' : ''}`}>{notice}</p>
+      ) : null}
+      {sale.cardPayments.length > 0 ? (
+        <ul className="small sale-cards" aria-label="Card payments">
+          {sale.cardPayments.map((card, index) => (
+            <li key={card.poiTransactionId}>
+              {cardLine(index, card)}
+              {card.refunded ? ' · refunded' : ''}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {mode === 'FULL' && sale.cardPayments.length > 1 ? (
+        <p className="small">Reverses all {sale.cardPayments.length} card payments, newest first</p>
       ) : null}
       <hr />
       <div className="flow-row tight">
@@ -181,6 +210,23 @@ function RefundDetailsCard({ sale }: { sale: StoredSaleUi }): ReactNode {
           No line items recorded for this sale — only a full refund is possible
         </p>
       )}
+      {mode === 'ITEMS' && refundable && sale.cardPayments.length > 1 ? (
+        <fieldset className="card-picker" aria-label="Return to">
+          <legend className="small">Return to:</legend>
+          {sale.cardPayments.map((card, index) => (
+            <LabeledRadio
+              key={card.poiTransactionId}
+              name={`card-${sale.id}`}
+              label={`${cardLine(index, card)}${
+                card.remainingMinor === null ? '' : ` · up to $${formatMinor(card.remainingMinor)}`
+              }`}
+              selected={cardChoice?.poiTransactionId === card.poiTransactionId}
+              enabled={refundable && hasCapacity(card)}
+              onClick={() => setPickedCard(card.poiTransactionId)}
+            />
+          ))}
+        </fieldset>
+      ) : null}
       <hr />
       {guard ? <p className="small">{guard}</p> : null}
       <button
@@ -191,7 +237,11 @@ function RefundDetailsCard({ sale }: { sale: StoredSaleUi }): ReactNode {
           if (mode === 'FULL') {
             controller.refundSale(sale.id);
           } else {
-            controller.addReturnToBasket(sale.id, selectedSkus);
+            controller.addReturnToBasket(
+              sale.id,
+              selectedSkus,
+              sale.cardPayments.length > 1 ? cardChoice?.poiTransactionId : undefined,
+            );
             setSelectedSkus(new Set());
           }
         }}

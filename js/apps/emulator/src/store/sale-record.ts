@@ -17,6 +17,10 @@ export interface TransactionLeg {
   readonly approvalCode?: string;
   readonly acquirerTransactionId?: string;
   readonly brand?: string;
+  /** Last four digits of the card, for a card leg whose terminal reported a masked number. */
+  readonly lastDigits?: string;
+  /** True for a card leg the terminal approved for less than it was asked. */
+  readonly partial?: boolean;
 }
 
 export interface SaleItem {
@@ -66,6 +70,12 @@ export interface RefundRecord {
   readonly poiTimestamp?: string;
   /** The tender leg the refund drew from; a legless full record exhausted the whole sale. */
   readonly leg?: LegType;
+  /**
+   * The original POI transaction of the leg, which tells apart the card payments of a split
+   * sale. Absent on records from before a sale could hold several: they cover every leg of the
+   * type.
+   */
+  readonly legPoiTransactionId?: string;
   /**
    * What actually flowed back to `leg`: `amount` is the whole return value, which may include
    * shares netted against a charge or paid out by the register.
@@ -118,21 +128,39 @@ export function legOf(sale: SaleRecord, type: LegType): TransactionLeg | undefin
   return sale.legs.find((leg) => leg.type === type);
 }
 
-export function legRefunded(stored: StoredSale, type: LegType): boolean {
-  return stored.refunds.some((refund) => refund.full && refund.leg === type);
+/** Every card payment of a sale, in the order the terminal charged them. */
+export function cardLegs(sale: SaleRecord): readonly TransactionLeg[] {
+  return sale.legs.filter((leg) => leg.type === 'CARD');
+}
+
+/** Whether a record's leg is this one: by POI reference when it names one, else by type. */
+function drawsFrom(refund: RefundRecord, leg: TransactionLeg): boolean {
+  return (
+    refund.leg === leg.type &&
+    (refund.legPoiTransactionId === undefined ||
+      refund.legPoiTransactionId === leg.poiTransactionId)
+  );
+}
+
+/** Whether a completed whole-sale void (a full record with no leg) returned every leg. */
+function wholeSaleRefunded(stored: StoredSale): boolean {
+  // A stopped void's per-load progress record is full but legless too; it is not the whole sale.
+  return stored.refunds.some(
+    (refund) => refund.full && refund.leg === undefined && !refund.reversalProgress,
+  );
+}
+
+export function legRefunded(stored: StoredSale, leg: TransactionLeg): boolean {
+  return (
+    wholeSaleRefunded(stored) ||
+    stored.refunds.some((refund) => refund.full && drawsFrom(refund, leg))
+  );
 }
 
 export function isFullyRefunded(stored: StoredSale): boolean {
-  // A stopped void's per-load progress record is full but legless too; it is not the whole sale.
-  if (
-    stored.refunds.some(
-      (refund) => refund.full && refund.leg === undefined && !refund.reversalProgress,
-    )
-  ) {
-    return true;
-  }
+  if (wholeSaleRefunded(stored)) return true;
   const legs = moneyLegs(stored.sale);
-  return legs.length > 0 && legs.every((leg) => legRefunded(stored, leg.type));
+  return legs.length > 0 && legs.every((leg) => legRefunded(stored, leg));
 }
 
 /** How much of the sold quantity of `sku` earlier refunds already returned. */
@@ -165,11 +193,11 @@ export function awardReversed(stored: StoredSale): boolean {
  * What a tender leg can still return: the amount it collected minus what earlier refunds drew
  * from it; `undefined` when unknown, the acquirer then enforces the cap.
  */
-export function remainingLegAmount(stored: StoredSale, type: LegType): Money | undefined {
-  const collected = legOf(stored.sale, type)?.amount;
+export function remainingLegAmount(stored: StoredSale, leg: TransactionLeg): Money | undefined {
+  const collected = leg.amount;
   if (collected === undefined) return undefined;
   const drawn = stored.refunds
-    .filter((refund) => refund.leg === type && !refund.reversalProgress)
+    .filter((refund) => drawsFrom(refund, leg) && !refund.reversalProgress)
     .reduce((sum, refund) => sum + cents(refund.tenderAmount ?? refund.amount), 0);
   return money(Math.max(0, cents(collected) - drawn));
 }
@@ -203,6 +231,12 @@ function leg(
   ];
 }
 
+/** The last four digits of a masked card number; `undefined` when there are fewer. */
+export function lastDigits(maskedPan: string | undefined): string | undefined {
+  const digits = (maskedPan ?? '').replace(/\D/g, '');
+  return digits.length >= 4 ? digits.slice(-4) : undefined;
+}
+
 /**
  * Flattens a completed payment into a `SaleRecord`: only the legs the terminal committed are
  * recorded (a rewards-only checkout may have no card leg), each with the POI reference a later
@@ -215,22 +249,37 @@ export function toSaleRecord(result: SettlementResult, context: SaleContext): Sa
   const storedValueIsPrimary =
     result.poiTransactionId !== undefined &&
     result.poiTransactionId === result.storedValuePoiTransactionId;
+  const cardPayments = result.cardPayments ?? [];
   const legs: TransactionLeg[] = [
-    ...(storedValueIsPrimary
-      ? []
-      : leg(
-          'CARD',
-          result.poiTransactionId,
-          result.poiTransactionTimestamp,
-          result.cardAmountCharged,
-          {
-            ...(result.approvalCode === undefined ? {} : { approvalCode: result.approvalCode }),
-            ...(result.acquirerTransactionId === undefined
+    ...(cardPayments.length > 0
+      ? cardPayments.flatMap((payment) =>
+          leg('CARD', payment.poiTransactionId, payment.poiTransactionTimestamp, payment.amount, {
+            ...(payment.approvalCode === undefined ? {} : { approvalCode: payment.approvalCode }),
+            ...(payment.acquirerTransactionId === undefined
               ? {}
-              : { acquirerTransactionId: result.acquirerTransactionId }),
-            ...(result.paymentBrand === undefined ? {} : { brand: result.paymentBrand }),
-          },
-        )),
+              : { acquirerTransactionId: payment.acquirerTransactionId }),
+            ...(payment.paymentBrand === undefined ? {} : { brand: payment.paymentBrand }),
+            ...(lastDigits(payment.maskedPan) === undefined
+              ? {}
+              : { lastDigits: lastDigits(payment.maskedPan)! }),
+            ...(payment.partialApproval ? { partial: true } : {}),
+          }),
+        )
+      : storedValueIsPrimary
+        ? []
+        : leg(
+            'CARD',
+            result.poiTransactionId,
+            result.poiTransactionTimestamp,
+            result.cardAmountCharged,
+            {
+              ...(result.approvalCode === undefined ? {} : { approvalCode: result.approvalCode }),
+              ...(result.acquirerTransactionId === undefined
+                ? {}
+                : { acquirerTransactionId: result.acquirerTransactionId }),
+              ...(result.paymentBrand === undefined ? {} : { brand: result.paymentBrand }),
+            },
+          )),
     ...leg(
       'STORED_VALUE',
       result.storedValuePoiTransactionId,
@@ -312,13 +361,21 @@ export function originalSaleRecord(stored: StoredSale): OriginalSaleRecord {
   const record: {
     -readonly [K in keyof OriginalSaleRecord]: OriginalSaleRecord[K];
   } = {};
-  const card = legOf(sale, 'CARD');
-  if (card && !legRefunded(stored, 'CARD')) {
-    record.cardPoiTransactionId = card.poiTransactionId;
-    if (card.poiTimestamp) record.cardPoiTransactionTimestamp = card.poiTimestamp;
+  const cards = cardLegs(sale).filter((card) => !legRefunded(stored, card));
+  const [firstCard] = cards;
+  if (cards.length > 1) {
+    // Several card payments: the list names each, and takes precedence over the single-card fields.
+    record.cardPayments = cards.map((card) => ({
+      poiTransactionId: card.poiTransactionId,
+      ...(card.poiTimestamp === undefined ? {} : { poiTransactionTimestamp: card.poiTimestamp }),
+      ...(card.amount === undefined ? {} : { amount: card.amount }),
+    }));
+  } else if (firstCard) {
+    record.cardPoiTransactionId = firstCard.poiTransactionId;
+    if (firstCard.poiTimestamp) record.cardPoiTransactionTimestamp = firstCard.poiTimestamp;
   }
   const storedValue = legOf(sale, 'STORED_VALUE');
-  if (storedValue && !legRefunded(stored, 'STORED_VALUE')) {
+  if (storedValue && !legRefunded(stored, storedValue)) {
     record.storedValuePoiTransactionId = storedValue.poiTransactionId;
     if (storedValue.poiTimestamp) {
       record.storedValuePoiTransactionTimestamp = storedValue.poiTimestamp;
@@ -334,12 +391,12 @@ export function originalSaleRecord(stored: StoredSale): OriginalSaleRecord {
     }));
   }
   const rebate = legOf(sale, 'REBATE');
-  if (rebate && !legRefunded(stored, 'REBATE')) {
+  if (rebate && !legRefunded(stored, rebate)) {
     record.rebatePoiTransactionId = rebate.poiTransactionId;
     if (rebate.poiTimestamp) record.rebatePoiTransactionTimestamp = rebate.poiTimestamp;
   }
   const redemption = legOf(sale, 'REDEMPTION');
-  if (redemption && !legRefunded(stored, 'REDEMPTION')) {
+  if (redemption && !legRefunded(stored, redemption)) {
     record.redemptionPoiTransactionId = redemption.poiTransactionId;
     if (redemption.poiTimestamp) {
       record.redemptionPoiTransactionTimestamp = redemption.poiTimestamp;

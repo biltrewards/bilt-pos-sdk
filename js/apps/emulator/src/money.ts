@@ -79,3 +79,12 @@ export function positiveMoneyMinor(raw: string): number | null {
   const minor = nonNegativeMoneyMinor(raw);
   return minor !== null && minor > 0 ? minor : null;
 }
+
+/**
+ * A planned card amount in cents: a positive decimal with at most two places and no trailing
+ * point, exactly what the controller accepts, so the controls never enable a Settle it refuses.
+ */
+export function plannedAmountMinor(raw: string): number | null {
+  const value = raw.trim();
+  return /^\d+(\.\d{1,2})?$/.test(value) ? positiveMoneyMinor(value) : null;
+}

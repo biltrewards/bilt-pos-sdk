@@ -1,6 +1,11 @@
-import type { ReactNode } from 'react';
+import { Fragment, type ReactNode } from 'react';
 import { useController, useEmulatorState } from '../emulator/context';
-import { RECOVERY_ACTIONS, type PaymentRecoveryPrompt } from '../emulator/state';
+import {
+  RECOVERY_ACTIONS,
+  partialApprovalChoice,
+  type PartialApprovalPrompt,
+  type PaymentRecoveryPrompt,
+} from '../emulator/state';
 import { Dialog } from './common';
 
 /**
@@ -22,11 +27,41 @@ function PaymentRecoveryDialog({ prompt }: { prompt: PaymentRecoveryPrompt }): R
   );
 }
 
-/** The recovery prompt and the outcome popup, over everything else. */
+/**
+ * A card approved less than it was asked for and the host waits for the cashier: not
+ * dismissible, one button per choice, each with a one-line description.
+ */
+function PartialApprovalDialog({ prompt }: { prompt: PartialApprovalPrompt }): ReactNode {
+  return (
+    <Dialog title="Partial approval" titleClass="error">
+      <p>
+        Card approved ${prompt.approved} of ${prompt.requested}, ${prompt.amountDue} still due
+      </p>
+      <p>Choose how to collect the rest:</p>
+      {prompt.actions.map((action) => {
+        const choice = partialApprovalChoice(action, prompt);
+        return (
+          <button
+            key={action}
+            type="button"
+            className="choice"
+            onClick={() => prompt.choose(action)}
+          >
+            <span>{choice.label}</span>
+            <span className="small">{choice.description}</span>
+          </button>
+        );
+      })}
+    </Dialog>
+  );
+}
+
+/** The recovery and partial-approval prompts and the outcome popup, over everything else. */
 export function Dialogs(): ReactNode {
   const controller = useController();
   const state = useEmulatorState();
   const outcome = state.paymentOutcome;
+  const receipts = outcome?.receipts ?? (outcome?.receipt ? [{ text: outcome.receipt }] : []);
   return (
     <>
       {outcome ? (
@@ -45,17 +80,19 @@ export function Dialogs(): ReactNode {
           }
         >
           <pre className="message">{outcome.message}</pre>
-          {outcome.receipt ? (
-            <>
+          {receipts.map((receipt, index) => (
+            <Fragment key={index}>
               <hr />
-              <pre className="receipt" aria-label="Receipt">
-                {outcome.receipt}
+              {receipt.caption ? <p className="small">{receipt.caption}</p> : null}
+              <pre className="receipt" aria-label={receipt.caption ?? 'Receipt'}>
+                {receipt.text}
               </pre>
-            </>
-          ) : null}
+            </Fragment>
+          ))}
         </Dialog>
       ) : null}
       {state.paymentRecovery ? <PaymentRecoveryDialog prompt={state.paymentRecovery} /> : null}
+      {state.partialApproval ? <PartialApprovalDialog prompt={state.partialApproval} /> : null}
     </>
   );
 }

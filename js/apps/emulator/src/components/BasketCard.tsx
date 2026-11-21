@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { useController, useEmulatorState } from '../emulator/context';
 import { canOperateTerminal, sessionOperationInProgress, type BasketLine } from '../emulator/state';
-import { formatMinor, nonNegativeMoneyMinor } from '../money';
+import { cents, formatMinor, nonNegativeMoneyMinor, plannedAmountMinor } from '../money';
 import { NJ_SALES_TAX_RATE } from '../tax';
 import { Dialog, LabeledCheckbox, LineItemRow } from './common';
 
@@ -96,6 +96,81 @@ function BasketAdjustmentDialog({
 }
 
 /**
+ * The planned card payments of a split sale: one amount field per fixed payment, + Add card, and
+ * the read-only last payment that takes whatever the basket total leaves. The total is the
+ * basket's; the host checks the amounts again once rebates, points and the gift card have
+ * reduced what the card owes.
+ */
+function SplitCardControls({
+  amounts,
+  total,
+  disabled,
+  onChange,
+}: {
+  amounts: readonly string[];
+  total: string;
+  disabled: boolean;
+  onChange: (amounts: string[]) => void;
+}): ReactNode {
+  const valid = amounts.every((amount) => plannedAmountMinor(amount) !== null);
+  const fixed = amounts.reduce((sum, amount) => sum + (plannedAmountMinor(amount) ?? 0), 0);
+  const remainder = Math.max(0, cents(total) - fixed);
+  return (
+    <div className="split-card" aria-label="Split card payments">
+      {amounts.map((amount, index) => (
+        <div key={index} className="flow-row tight">
+          <label className="check">
+            Card {index + 1} $
+            <input
+              className="compact"
+              aria-label={`Card ${index + 1} amount`}
+              placeholder="0.00"
+              inputMode="decimal"
+              value={amount}
+              disabled={disabled}
+              onChange={(event) =>
+                onChange(amounts.map((entry, i) => (i === index ? event.target.value : entry)))
+              }
+            />
+          </label>
+          {amounts.length > 1 ? (
+            <button
+              type="button"
+              className="text"
+              aria-label={`Remove card ${index + 1}`}
+              disabled={disabled}
+              onClick={() => onChange(amounts.filter((_, i) => i !== index))}
+            >
+              Remove
+            </button>
+          ) : null}
+        </div>
+      ))}
+      <div className="flow-row tight">
+        <button
+          type="button"
+          className="text"
+          disabled={disabled}
+          onClick={() => onChange([...amounts, ''])}
+        >
+          + Add card
+        </button>
+        <span className="small" data-testid="card-remainder">
+          Card {amounts.length + 1}: remainder ${formatMinor(remainder)}
+        </span>
+      </div>
+      {!valid ? (
+        <p className="small error">Enter a positive amount for every card</p>
+      ) : cents(total) - fixed <= 0 ? (
+        <p className="small error">
+          The planned cards reach the total: the settlement will be refused
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/**
  * The toggles for the next payment and the Settle button. The loyalty steps run only for an
  * identified member; the gift card is charged first and the remainder goes to the card; net
  * settlement moves only the signed difference of a mixed basket.
@@ -109,6 +184,9 @@ function PaymentControls(): ReactNode {
   const [award, setAward] = useState(false);
   const [giftCard, setGiftCard] = useState(false);
   const [netSettlement, setNetSettlement] = useState(true);
+  const [splitCard, setSplitCard] = useState(false);
+  const [plannedAmounts, setPlannedAmounts] = useState<string[]>(['']);
+  const [partialApprovals, setPartialApprovals] = useState(true);
   const [giftCardNumber, setGiftCardNumber] = useState('');
   const [consumedRead, setConsumedRead] = useState(0);
   const read = state.acquiredCard;
@@ -120,7 +198,8 @@ function PaymentControls(): ReactNode {
   }, [giftCard, read, consumedRead]);
 
   const paid = state.lastPayment !== null;
-  const canPay = canOperateTerminal(state) && state.basket.length > 0 && !paid;
+  const splitValid = !splitCard || plannedAmounts.every((a) => plannedAmountMinor(a) !== null);
+  const canPay = canOperateTerminal(state) && state.basket.length > 0 && !paid && splitValid;
   const busy = state.paymentInProgress;
   const label = busy
     ? 'Settling…'
@@ -138,7 +217,11 @@ function PaymentControls(): ReactNode {
           label="Implicit Loyalty"
           checked={implicit}
           disabled={busy}
-          onChange={setImplicit}
+          onChange={(checked) => {
+            setImplicit(checked);
+            // planned card payments cannot ride with implicit loyalty
+            if (checked) setSplitCard(false);
+          }}
         />
         <LabeledCheckbox
           label="Rebates"
@@ -163,6 +246,18 @@ function PaymentControls(): ReactNode {
           checked={giftCard}
           disabled={busy}
           onChange={setGiftCard}
+        />
+        <LabeledCheckbox
+          label="Split card"
+          checked={splitCard}
+          disabled={busy || implicit}
+          onChange={setSplitCard}
+        />
+        <LabeledCheckbox
+          label="Partial approvals"
+          checked={partialApprovals}
+          disabled={busy}
+          onChange={setPartialApprovals}
         />
         <LabeledCheckbox
           label="Net settlement"
@@ -190,6 +285,19 @@ function PaymentControls(): ReactNode {
           </button>
         </div>
       ) : null}
+      {implicit ? (
+        <p className="small" data-testid="split-card-caption">
+          Split card needs explicit loyalty: clear Implicit Loyalty first
+        </p>
+      ) : null}
+      {splitCard ? (
+        <SplitCardControls
+          amounts={plannedAmounts}
+          total={state.basketTotal}
+          disabled={busy}
+          onChange={setPlannedAmounts}
+        />
+      ) : null}
       {paid ? (
         <p className="small success" data-testid="last-payment">
           {state.lastPayment} —{' '}
@@ -207,6 +315,7 @@ function PaymentControls(): ReactNode {
             { implicit, rebates, redemption, award },
             giftCard ? { cardNumber: giftCardNumber } : null,
             netSettlement,
+            { plannedAmounts: splitCard ? plannedAmounts : [], partialApprovals },
           )
         }
       >

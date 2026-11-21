@@ -14,6 +14,7 @@ import {
 import { defaultReversalDecision, reversalProgress } from '../src/store/reversals';
 import {
   isFullyRefunded,
+  legOf,
   originalSaleRecord,
   remainingLegAmount,
   toSaleRecord,
@@ -48,6 +49,16 @@ function result(overrides: Partial<SettlementResult> = {}): SettlementResult {
   ]);
   return {
     ...fx.settlementResult(basket, '62.31'),
+    cardPayments: [
+      {
+        amount: '62.31',
+        poiTransactionId: 'POI-PAY-1',
+        poiTransactionTimestamp: '2026-10-06T14:03:10Z',
+        approvalCode: 'A1B2C3',
+        paymentBrand: 'Visa',
+        partialApproval: false,
+      },
+    ],
     poiTransactionId: 'POI-PAY-1',
     poiTransactionTimestamp: '2026-10-06T14:03:10Z',
     awardPoiTransactionId: 'POI-AW-1',
@@ -110,6 +121,7 @@ describe('toSaleRecord', () => {
         storedValuePoiTransactionId: 'POI-SV-1',
         storedValueAmountUsed: '62.31',
         cardAmountCharged: '0.00',
+        cardPayments: [],
       }),
       CONTEXT,
     );
@@ -135,7 +147,7 @@ describe('return and refund plans', () => {
   });
 
   it('omits the legs a stopped void already reversed', () => {
-    const progress = reversalProgress(stored, [{ step: 'CARD', poiTransactionId: 'POI-REV-1' }]);
+    const progress = reversalProgress(stored, [{ step: 'CARD', poiTransactionId: 'POI-PAY-1' }]);
     const retried: StoredSale = { ...stored, refunds: progress };
     expect(originalSaleRecord(retried).cardPoiTransactionId).toBeUndefined();
     expect(originalSaleRecord(retried).awardPoiTransactionId).toBe('POI-AW-1');
@@ -238,7 +250,7 @@ describe('return and refund plans', () => {
       items: [{ sku: 'SKU-0013', quantity: 1 }],
     });
     const after: StoredSale = { ...tenderOnly, refunds: [...records] };
-    expect(remainingLegAmount(after, 'CARD')).toBe('25.00');
+    expect(remainingLegAmount(after, legOf(after.sale, 'CARD')!)).toBe('25.00');
     const ui = toStoredSaleUi(after, () => 0);
     expect(ui.items[0]).toMatchObject({ remainingQuantity: 0, refundMinor: 0 });
     expect(ui).toMatchObject({ refunded: true, fullyRefunded: false, fullRefundAvailable: false });
@@ -303,5 +315,169 @@ describe('IndexedDbSaleStore', () => {
     expect((await store.findSale('sale-a'))?.refunds[0]?.amount).toBe('5.00');
     expect(await store.findSale('nope')).toBeNull();
     expect(notified).toHaveLength(4);
+  });
+});
+
+describe('a sale with several card payments', () => {
+  const split = (): SettlementResult => ({
+    ...result({ movements: [] }),
+    cardAmountCharged: '62.31',
+    cardPayments: [
+      {
+        amount: '20.00',
+        poiTransactionId: 'POI-A',
+        poiTransactionTimestamp: '2026-10-06T14:03:10Z',
+        paymentBrand: 'Visa',
+        maskedPan: '************4242',
+        partialApproval: true,
+      },
+      {
+        amount: '42.31',
+        poiTransactionId: 'POI-B',
+        poiTransactionTimestamp: '2026-10-06T14:04:10Z',
+        paymentBrand: 'Mastercard',
+        partialApproval: false,
+      },
+    ],
+  });
+  // no gift-card purchase, so its merchandise is returnable
+  const sale = { ...toSaleRecord(split(), CONTEXT), giftCardLoads: [] };
+  const stored: StoredSale = { sale, refunds: [], voided: null };
+
+  it('records one card leg per payment', () => {
+    const cards = sale.legs.filter((leg) => leg.type === 'CARD');
+    expect(cards).toMatchObject([
+      {
+        poiTransactionId: 'POI-A',
+        amount: '20.00',
+        brand: 'Visa',
+        lastDigits: '4242',
+        partial: true,
+      },
+      { poiTransactionId: 'POI-B', amount: '42.31', brand: 'Mastercard' },
+    ]);
+    expect(cards[1]).not.toHaveProperty('partial');
+    expect(toStoredSaleUi(stored, () => 0).cardPayments).toMatchObject([
+      { poiTransactionId: 'POI-A', partial: true, refunded: false },
+      { poiTransactionId: 'POI-B', partial: false, refunded: false },
+    ]);
+  });
+
+  it('voids every card payment through cardPayments', () => {
+    const record = originalSaleRecord(stored);
+    expect(record.cardPayments).toEqual([
+      {
+        poiTransactionId: 'POI-A',
+        poiTransactionTimestamp: '2026-10-06T14:03:10Z',
+        amount: '20.00',
+      },
+      {
+        poiTransactionId: 'POI-B',
+        poiTransactionTimestamp: '2026-10-06T14:04:10Z',
+        amount: '42.31',
+      },
+    ]);
+    expect(record.cardPoiTransactionId).toBeUndefined();
+  });
+
+  it('retries a stopped void from the card payment still standing', () => {
+    const progress = reversalProgress(stored, [{ step: 'CARD', poiTransactionId: 'POI-B' }]);
+    const retried: StoredSale = { ...stored, refunds: progress };
+    expect(originalSaleRecord(retried)).toMatchObject({ cardPoiTransactionId: 'POI-A' });
+    expect(originalSaleRecord(retried).cardPayments).toBeUndefined();
+    expect(isFullyRefunded(retried)).toBe(false);
+    const both = reversalProgress(stored, [
+      { step: 'CARD', poiTransactionId: 'POI-B' },
+      { step: 'CARD', poiTransactionId: 'POI-A' },
+    ]);
+    expect(isFullyRefunded({ ...stored, refunds: both })).toBe(true);
+  });
+
+  it('shows every card payment refunded after a whole-sale void', () => {
+    const voided: StoredSale = {
+      ...stored,
+      refunds: [fullRefundRecord(stored, { success: true } as never)],
+    };
+    expect(isFullyRefunded(voided)).toBe(true);
+    expect(toStoredSaleUi(voided, () => 0).cardPayments).toMatchObject([
+      { poiTransactionId: 'POI-A', refunded: true, remainingMinor: 0 },
+      { poiTransactionId: 'POI-B', refunded: true, remainingMinor: 0 },
+    ]);
+  });
+
+  it('defaults a return to the card that still holds something, and lists the drawn-down one without capacity', () => {
+    const drawnDown: StoredSale = {
+      ...stored,
+      refunds: [
+        {
+          saleId: 'sale-1',
+          recordedAt: '2026-10-07T10:00:00Z',
+          amount: '20.00',
+          leg: 'CARD',
+          legPoiTransactionId: 'POI-A',
+          tenderAmount: '20.00',
+          full: false,
+          awardReversed: false,
+          reversalProgress: false,
+          items: [],
+        },
+      ],
+    };
+    const plan = planReturn(drawnDown, new Set(['SKU-0013']), () => 0);
+    expect('pending' in plan && plan.pending.leg.poiTransactionId).toBe('POI-B');
+    expect('pending' in plan && plan.cardNumber).toBe(2);
+    expect(toStoredSaleUi(drawnDown, () => 0).cardPayments).toMatchObject([
+      { poiTransactionId: 'POI-A', refunded: false, remainingMinor: 0 },
+      { poiTransactionId: 'POI-B', refunded: false, remainingMinor: 4231 },
+    ]);
+  });
+
+  it('plans a return against the chosen card, the first standing one by default', () => {
+    const skus = new Set(['SKU-0013']);
+    const byDefault = planReturn(stored, skus, () => 0);
+    const chosen = planReturn(stored, skus, () => 0, 'POI-B');
+    expect('pending' in byDefault && byDefault.pending.leg.poiTransactionId).toBe('POI-A');
+    expect('pending' in chosen && chosen.pending.leg.poiTransactionId).toBe('POI-B');
+    expect('pending' in chosen && chosen.pending.legCapacityMinor).toBe(4231);
+    expect(planReturn(stored, skus, () => 0, 'POI-NOPE')).toMatchObject({
+      error: expect.any(String),
+    });
+  });
+
+  it('keeps a card’s refunds apart from the other card’s capacity', () => {
+    const skus = new Set(['SKU-0013']);
+    const plan = planReturn(stored, skus, () => 0, 'POI-A');
+    if (!('pending' in plan)) throw new Error(plan.error);
+    const { returns, allocations } = planAllocations([plan.pending], 3731);
+    const { records } = settledReturns(returns, {
+      ...split(),
+      movements: [
+        {
+          step: 'CARD_REFUND',
+          target: { type: 'SALES' },
+          amount: '20.00',
+          poiTransactionId: 'POI-RF',
+        },
+      ],
+    });
+    // card A only collected $20.00; the register pays out the rest
+    expect(allocations).toEqual([
+      {
+        type: 'CARD',
+        amount: '20.00',
+        originalPoiTransactionId: 'POI-A',
+        originalPoiTransactionTimestamp: '2026-10-06T14:03:10Z',
+      },
+      { type: 'EXTERNAL', amount: '17.31' },
+    ]);
+    expect(records[0]).toMatchObject({
+      leg: 'CARD',
+      legPoiTransactionId: 'POI-A',
+      tenderAmount: '20.00',
+    });
+    const after: StoredSale = { ...stored, refunds: [...records] };
+    const [cardA, cardB] = sale.legs.filter((leg) => leg.type === 'CARD');
+    expect(remainingLegAmount(after, cardA!)).toBe('0.00');
+    expect(remainingLegAmount(after, cardB!)).toBe('42.31');
   });
 });
