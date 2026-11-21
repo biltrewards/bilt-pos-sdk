@@ -288,16 +288,19 @@ public interface TerminalShopperSession extends ShopperSession {
    * is not refunded — use {@code voidTransaction()} to reverse both legs, or the stored value
    * operations to return funds to the gift card. A refund reverses the card payments and award
    * only; the sale's committed rebate and redemption movements are reversed by {@link
-   * #voidTransaction()}. If a refund stops after some card payments were refunded, a retried {@code
-   * refund()} sends only the ones still standing; once every card payment was refunded in full,
-   * another {@code refund()} is refused. The {@link RefundResult}'s amount sums every card refund
-   * this call sent, and its reference and receipts describe the first. Once a refund has returned
-   * money the payment can no longer be voided; a tender skipped by an {@code onError} decision
-   * leaves it voidable, with an award the flow reversed remembered so nothing re-credits it. Once a
-   * void has partially reversed the payment's money legs, refunds are refused until the void is
-   * finished. To refund a sale taken by an earlier session, ring return lines into a new session
-   * and provide refund allocations on {@link SettlementOptions}. Loyalty reversals use the member
-   * attached when this payment settled, even if the session was subsequently re-identified.
+   * #voidTransaction()}. If a refund stops after some card payments were refunded, its error lists
+   * them in {@link SessionError#getReversedMovements()} (as does the error an {@code onError}
+   * handler receives), the session refuses {@code basket().clear()}, another settlement, and {@link
+   * #end()} until a retried {@code refund()} succeeds, and that retry sends only the ones still
+   * standing; once every card payment was refunded in full, another {@code refund()} is refused.
+   * The {@link RefundResult}'s amount sums every card refund this call sent, and its reference and
+   * receipts describe the first. Once a refund has returned money the payment can no longer be
+   * voided; a tender skipped by an {@code onError} decision leaves it voidable, with an award the
+   * flow reversed remembered so nothing re-credits it. Once a void has partially reversed the
+   * payment's money legs, refunds are refused until the void is finished. To refund a sale taken by
+   * an earlier session, ring return lines into a new session and provide refund allocations on
+   * {@link SettlementOptions}. Loyalty reversals use the member attached when this payment settled,
+   * even if the session was subsequently re-identified.
    */
   ReversalFlow<RefundResult> refund();
 

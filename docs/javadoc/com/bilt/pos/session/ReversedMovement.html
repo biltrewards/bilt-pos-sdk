@@ -92,7 +92,8 @@ loadScripts(document, 'script');</script>
 <hr>
 <div class="type-signature"><span class="modifiers">public final class </span><span class="element-name type-name-label">ReversedMovement</span>
 <span class="extends-implements">extends <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Object.html" title="class or interface in java.lang" class="external-link">Object</a></span></div>
-<div class="block">A movement that completed before a whole-sale void stopped.
+<div class="block">A movement that completed before a whole-sale void, or a refund of several card payments,
+ stopped. For a refund, each entry is a card payment (step <code>CARD</code>) already refunded in full.
 
  <p>Use the step and POI transaction ID to persist cross-session reversal progress. A later void
  can omit these references from its <code>OriginalSaleRecord</code>, avoiding a second reversal of
