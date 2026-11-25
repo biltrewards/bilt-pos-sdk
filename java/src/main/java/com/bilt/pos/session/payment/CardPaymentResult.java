@@ -21,6 +21,12 @@ import java.util.Objects;
  *
  * <p>Every reference is as the terminal reported it, so each may be {@code null} when the response
  * did not carry it.
+ *
+ * <p>Bilt rewards can pay part of a card payment (implicit loyalty with multi-tender off on the
+ * terminal). Then {@link #getAmount()} is still everything the payment authorized, which is what a
+ * void reverses, and {@link #getBiltRewardsAmount()} is the rewards part of it: the card paid
+ * {@link #getCardAmount()}. A payment the rewards paid in full is not a card payment; see {@link
+ * BiltRewardsPaymentResult}.
  */
 public final class CardPaymentResult {
 
@@ -34,6 +40,7 @@ public final class CardPaymentResult {
   private final Receipt customerReceipt;
   private final Receipt merchantReceipt;
   private final boolean partialApproval;
+  private final BigDecimal biltRewardsAmount;
 
   private CardPaymentResult(Builder builder) {
     this.amount = Objects.requireNonNull(builder.amount, "amount");
@@ -46,13 +53,18 @@ public final class CardPaymentResult {
     this.customerReceipt = builder.customerReceipt;
     this.merchantReceipt = builder.merchantReceipt;
     this.partialApproval = builder.partialApproval;
+    this.biltRewardsAmount =
+        builder.biltRewardsAmount == null ? BigDecimal.ZERO : builder.biltRewardsAmount;
   }
 
   public static Builder builder() {
     return new Builder();
   }
 
-  /** Amount the terminal authorized for this payment, cashback included. */
+  /**
+   * Amount the terminal authorized for this payment, cashback included, and Bilt rewards included
+   * when they paid part of it ({@link #getBiltRewardsAmount()}).
+   */
   public BigDecimal getAmount() {
     return amount;
   }
@@ -96,6 +108,22 @@ public final class CardPaymentResult {
     return partialApproval;
   }
 
+  /**
+   * The part of {@link #getAmount()} the terminal paid with Bilt rewards, as it reported it in
+   * {@code biltRewardsAmount}; zero when the card paid it all.
+   */
+  public BigDecimal getBiltRewardsAmount() {
+    return biltRewardsAmount;
+  }
+
+  /**
+   * The part of {@link #getAmount()} the card paid: the amount less {@link
+   * #getBiltRewardsAmount()}.
+   */
+  public BigDecimal getCardAmount() {
+    return amount.subtract(biltRewardsAmount);
+  }
+
   /** Builder for {@link CardPaymentResult}. Intended for SDK use. */
   public static final class Builder {
 
@@ -109,6 +137,7 @@ public final class CardPaymentResult {
     private Receipt customerReceipt;
     private Receipt merchantReceipt;
     private boolean partialApproval;
+    private BigDecimal biltRewardsAmount;
 
     private Builder() {}
 
@@ -159,6 +188,11 @@ public final class CardPaymentResult {
 
     public Builder partialApproval(boolean partialApproval) {
       this.partialApproval = partialApproval;
+      return this;
+    }
+
+    public Builder biltRewardsAmount(BigDecimal biltRewardsAmount) {
+      this.biltRewardsAmount = biltRewardsAmount;
       return this;
     }
 

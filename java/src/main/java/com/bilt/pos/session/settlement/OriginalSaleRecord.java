@@ -9,13 +9,16 @@
  */
 package com.bilt.pos.session.settlement;
 
+import com.bilt.pos.session.payment.BiltRewardsPaymentResult;
 import com.bilt.pos.session.payment.CardPaymentResult;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * References from a completed sale that a later checkout session can use to void the whole original
@@ -29,10 +32,17 @@ import java.util.Objects;
  * reference — how a gift-card-only sale was recorded before card payment lists — is read as the
  * stored value payment only: it is left out of {@link #getCardPayments()}, and the single-card
  * getters still return it.
+ *
+ * <p>A payment the terminal paid entirely with Bilt rewards is not a card payment either: it is in
+ * {@link #getBiltRewardsPayments()}, and a card reference equal to one of its references is read as
+ * that rewards payment only. A sale paid only with rewards has no card payment, so its single-card
+ * getters return {@code null}. The rewards part of a card payment is its {@link
+ * CardPaymentRecord#getBiltRewardsAmount()}.
  */
 public final class OriginalSaleRecord {
 
   private final List<CardPaymentRecord> cardPayments;
+  private final List<BiltRewardsPaymentRecord> biltRewardsPayments;
   // a single-card reference that was the stored value payment, kept for the single-card getters
   private final CardPaymentRecord storedValueAsCard;
   private final String storedValuePoiTransactionId;
@@ -48,14 +58,23 @@ public final class OriginalSaleRecord {
 
   private OriginalSaleRecord(Builder builder) {
     List<CardPaymentRecord> resolved = builder.resolvedCardPayments();
+    Set<String> biltRewards = new HashSet<>();
+    for (BiltRewardsPaymentRecord payment : builder.biltRewardsPayments) {
+      biltRewards.add(payment.getPoiTransactionId());
+    }
     CardPaymentRecord giftCard = null;
     for (Iterator<CardPaymentRecord> it = resolved.iterator(); it.hasNext(); ) {
       CardPaymentRecord payment = it.next();
       if (payment.getPoiTransactionId().equals(builder.storedValuePoiTransactionId)) {
         giftCard = giftCard == null ? payment : giftCard;
         it.remove();
+      } else if (biltRewards.contains(payment.getPoiTransactionId())) {
+        // the rewards payment, also given as a card reference: it is not a card payment
+        it.remove();
       }
     }
+    this.biltRewardsPayments =
+        Collections.unmodifiableList(new ArrayList<>(builder.biltRewardsPayments));
     this.cardPayments = Collections.unmodifiableList(resolved);
     this.storedValueAsCard = giftCard;
     this.storedValuePoiTransactionId = builder.storedValuePoiTransactionId;
@@ -75,11 +94,12 @@ public final class OriginalSaleRecord {
   }
 
   /**
-   * Builds a record from a completed settlement result, with every card payment the terminal
-   * reported a POI reference for. A result without such a card payment keeps its single payment
-   * reference ({@link SettlementResult#getPoiTransactionId()}) as the card payment, unless that is
-   * the stored value payment: a gift-card-only sale has no card payments, and its payment is only
-   * in the stored value fields (the single-card getters still return it, as before).
+   * Builds a record from a completed settlement result, with every card payment and every Bilt
+   * rewards payment the terminal reported a POI reference for. A result without such a card payment
+   * keeps its single payment reference ({@link SettlementResult#getPoiTransactionId()}) as the card
+   * payment, unless that is the stored value payment or a rewards payment: a gift-card-only sale
+   * has no card payments, and its payment is only in the stored value fields (the single-card
+   * getters still return it, as before).
    */
   public static OriginalSaleRecord from(SettlementResult result, String memberId) {
     Builder builder = builder();
@@ -88,7 +108,12 @@ public final class OriginalSaleRecord {
         builder.addCardPayment(CardPaymentRecord.from(payment));
       }
     }
-    if (builder.cardPayments.isEmpty()) {
+    for (BiltRewardsPaymentResult payment : result.getBiltRewardsPayments()) {
+      if (payment.getPoiTransactionId() != null) {
+        builder.addBiltRewardsPayment(BiltRewardsPaymentRecord.from(payment));
+      }
+    }
+    if (builder.cardPayments.isEmpty() && result.getBiltRewardsPayments().isEmpty()) {
       builder
           .cardPoiTransactionId(result.getPoiTransactionId())
           .cardPoiTransactionTimestamp(result.getPoiTransactionTimestamp());
@@ -107,9 +132,22 @@ public final class OriginalSaleRecord {
         .build();
   }
 
-  /** The sale's card payments in the order they were made; empty when it had none. */
+  /**
+   * The sale's card payments in the order they were made; empty when it had none. Payments Bilt
+   * rewards paid in full are not card payments: see {@link #getBiltRewardsPayments()}.
+   */
   public List<CardPaymentRecord> getCardPayments() {
     return cardPayments;
+  }
+
+  /**
+   * The sale's Bilt rewards payments, those the terminal paid entirely with Bilt rewards, in the
+   * order they were made; empty when it had none. A void reverses each by its POI reference and a
+   * refund returns the rewards; see {@link RefundAllocation#biltRewards(java.math.BigDecimal,
+   * BiltRewardsPaymentRecord)}.
+   */
+  public List<BiltRewardsPaymentRecord> getBiltRewardsPayments() {
+    return biltRewardsPayments;
   }
 
   /**
@@ -176,6 +214,7 @@ public final class OriginalSaleRecord {
   /** Whether the record contains at least one movement reference. */
   public boolean hasMovement() {
     return !cardPayments.isEmpty()
+        || !biltRewardsPayments.isEmpty()
         || storedValuePoiTransactionId != null
         || !storedValueLoads.isEmpty()
         || rebatePoiTransactionId != null
@@ -195,6 +234,11 @@ public final class OriginalSaleRecord {
   public boolean sharesMovementWith(OriginalSaleRecord other) {
     Objects.requireNonNull(other, "other");
     for (CardPaymentRecord payment : other.cardPayments) {
+      if (references(payment.getPoiTransactionId())) {
+        return true;
+      }
+    }
+    for (BiltRewardsPaymentRecord payment : other.biltRewardsPayments) {
       if (references(payment.getPoiTransactionId())) {
         return true;
       }
@@ -228,6 +272,11 @@ public final class OriginalSaleRecord {
         return true;
       }
     }
+    for (BiltRewardsPaymentRecord payment : biltRewardsPayments) {
+      if (poiTransactionId.equals(payment.getPoiTransactionId())) {
+        return true;
+      }
+    }
     for (StoredValueLoadRecord load : storedValueLoads) {
       if (poiTransactionId.equals(load.getPoiTransactionId())) {
         return true;
@@ -246,6 +295,7 @@ public final class OriginalSaleRecord {
     }
     OriginalSaleRecord that = (OriginalSaleRecord) other;
     return cardPayments.equals(that.cardPayments)
+        && biltRewardsPayments.equals(that.biltRewardsPayments)
         && Objects.equals(storedValueAsCard, that.storedValueAsCard)
         && Objects.equals(storedValuePoiTransactionId, that.storedValuePoiTransactionId)
         && Objects.equals(
@@ -264,6 +314,7 @@ public final class OriginalSaleRecord {
   public int hashCode() {
     return Objects.hash(
         cardPayments,
+        biltRewardsPayments,
         storedValueAsCard,
         storedValuePoiTransactionId,
         storedValuePoiTransactionTimestamp,
@@ -281,6 +332,7 @@ public final class OriginalSaleRecord {
   public static final class Builder {
 
     private List<CardPaymentRecord> cardPayments = new ArrayList<>();
+    private List<BiltRewardsPaymentRecord> biltRewardsPayments = new ArrayList<>();
     private String cardPoiTransactionId;
     private Instant cardPoiTransactionTimestamp;
     private String storedValuePoiTransactionId;
@@ -308,6 +360,22 @@ public final class OriginalSaleRecord {
     /** Appends the sale's next card payment. */
     public Builder addCardPayment(CardPaymentRecord cardPayment) {
       this.cardPayments.add(Objects.requireNonNull(cardPayment, "cardPayment"));
+      return this;
+    }
+
+    /** The sale's Bilt rewards payments in the order they were made. Replaces any added before. */
+    public Builder biltRewardsPayments(List<BiltRewardsPaymentRecord> biltRewardsPayments) {
+      this.biltRewardsPayments = new ArrayList<>();
+      if (biltRewardsPayments != null) {
+        biltRewardsPayments.forEach(this::addBiltRewardsPayment);
+      }
+      return this;
+    }
+
+    /** Appends the sale's next Bilt rewards payment. */
+    public Builder addBiltRewardsPayment(BiltRewardsPaymentRecord biltRewardsPayment) {
+      this.biltRewardsPayments.add(
+          Objects.requireNonNull(biltRewardsPayment, "biltRewardsPayment"));
       return this;
     }
 
@@ -399,6 +467,7 @@ public final class OriginalSaleRecord {
               .poiTransactionId(cardPoiTransactionId)
               .poiTransactionTimestamp(cardPoiTransactionTimestamp)
               .amount(resolved.isEmpty() ? null : resolved.get(0).getAmount())
+              .biltRewardsAmount(resolved.isEmpty() ? null : resolved.get(0).getBiltRewardsAmount())
               .build();
       if (resolved.isEmpty()) {
         resolved.add(first);

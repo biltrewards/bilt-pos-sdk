@@ -63,6 +63,7 @@ import com.bilt.pos.session.internal.SaleItemMapper;
 import com.bilt.pos.session.internal.SessionSignalCodec;
 import com.bilt.pos.session.internal.StoredValueManager;
 import com.bilt.pos.session.internal.Wire;
+import com.bilt.pos.session.settlement.BiltRewardsPaymentRecord;
 import com.bilt.pos.session.settlement.CardPaymentRecord;
 import com.bilt.pos.session.settlement.CommittedStep;
 import com.bilt.pos.session.settlement.OriginalSaleRecord;
@@ -1032,16 +1033,55 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
                   () -> {},
                   () -> {},
                   serviceId);
-          return refundMovement(
-              step,
-              allocation,
-              saleTransaction,
-              serviceId,
-              card.getRefundedAmount(),
-              card.getPoiTransactionId(),
-              card.getPoiTransactionTimestamp(),
-              null,
-              null);
+          return withBiltRewards(
+              refundMovement(
+                  step,
+                  allocation,
+                  saleTransaction,
+                  serviceId,
+                  card.getRefundedAmount(),
+                  card.getPoiTransactionId(),
+                  card.getPoiTransactionTimestamp(),
+                  null,
+                  null),
+              card.getCardRefunds().isEmpty()
+                  ? null
+                  : card.getCardRefunds().get(0).getBiltRewardsAmount());
+        }
+      case BILT_REWARDS:
+        {
+          RefundResult rewards =
+              reversalManager.refund(
+                  allocation.getAmount(),
+                  saleItems,
+                  List.of(
+                      new ReversalMovement(
+                          ReversalStep.BILT_REWARDS,
+                          allocation.getOriginalPoiTransactionId(),
+                          allocation.getOriginalPoiTransactionTimestamp(),
+                          allocation.getAmount(),
+                          TenderType.BILT_REWARDS)),
+                  null,
+                  null,
+                  allocation.getMemberId(),
+                  saleTransaction,
+                  null,
+                  null,
+                  original -> {},
+                  () -> {},
+                  serviceId);
+          SettlementMovement movement =
+              refundMovement(
+                  step,
+                  allocation,
+                  saleTransaction,
+                  serviceId,
+                  rewards.getRefundedAmount(),
+                  rewards.getPoiTransactionId(),
+                  rewards.getPoiTransactionTimestamp(),
+                  null,
+                  null);
+          return withBiltRewards(movement, movement.getAmount());
         }
       case STORE_CREDIT:
         StoredValueOperationResult storeCredit =
@@ -1147,7 +1187,30 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
   }
 
   private static boolean carriesRefundSaleItems(RefundAllocationType type) {
-    return type == RefundAllocationType.CARD || type == RefundAllocationType.STORED_VALUE;
+    return type == RefundAllocationType.CARD
+        || type == RefundAllocationType.BILT_REWARDS
+        || type == RefundAllocationType.STORED_VALUE;
+  }
+
+  /** {@code movement} with the part of its amount that went back to Bilt rewards, if any. */
+  private static SettlementMovement withBiltRewards(
+      SettlementMovement movement, BigDecimal biltRewards) {
+    if (biltRewards == null || biltRewards.signum() <= 0) {
+      return movement;
+    }
+    return SettlementMovement.builder()
+        .step(movement.getStep())
+        .target(movement.getTarget())
+        .amount(movement.getAmount())
+        .saleTransactionId(movement.getSaleTransactionId())
+        .serviceId(movement.getServiceId())
+        .poiTransactionId(movement.getPoiTransactionId())
+        .poiTransactionTimestamp(movement.getPoiTransactionTimestamp())
+        .memberId(movement.getMemberId())
+        .points(movement.getPoints())
+        .pointBalance(movement.getPointBalance())
+        .biltRewardsAmount(biltRewards)
+        .build();
   }
 
   private static SettlementMovement refundMovement(
@@ -1179,6 +1242,7 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
   private static MessageCategoryType refundCategory(RefundAllocationType type) {
     switch (type) {
       case CARD:
+      case BILT_REWARDS:
       case STORED_VALUE:
         return MessageCategoryType.PAYMENT;
       case STORE_CREDIT:
@@ -1195,6 +1259,7 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
   private static SettlementStep refundStep(RefundAllocationType type) {
     switch (type) {
       case CARD:
+      case BILT_REWARDS:
         return SettlementStep.CARD_REFUND;
       case STORED_VALUE:
       case STORE_CREDIT:
@@ -1362,7 +1427,16 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
     if (purchase != null) {
       movements.addAll(purchase.getMovements());
     }
-    BigDecimal cardRefunded = sumMovements(refundMovements, SettlementStep.CARD_REFUND);
+    // a card refund's Bilt rewards part, and a rewards allocation whole, went back to rewards
+    BigDecimal biltRewardsRefunded = BigDecimal.ZERO;
+    for (SettlementMovement movement : refundMovements) {
+      if (movement.getStep() == SettlementStep.CARD_REFUND
+          && movement.getBiltRewardsAmount() != null) {
+        biltRewardsRefunded = biltRewardsRefunded.add(movement.getBiltRewardsAmount());
+      }
+    }
+    BigDecimal cardRefunded =
+        sumMovements(refundMovements, SettlementStep.CARD_REFUND).subtract(biltRewardsRefunded);
     BigDecimal storedValueRefunded =
         sumMovements(refundMovements, SettlementStep.STORED_VALUE_REFUND);
     BigDecimal externalRefunded = sumMovements(refundMovements, SettlementStep.EXTERNAL_REFUND);
@@ -1379,6 +1453,7 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
         .success(true)
         .finalBasket(finalBasket)
         .cardRefundedAmount(cardRefunded)
+        .biltRewardsRefundedAmount(biltRewardsRefunded)
         .storedValueRefundedAmount(storedValueRefunded)
         .externalRefundedAmount(externalRefunded)
         .loyaltyRefundedAmount(loyaltyRefunded)
@@ -1448,9 +1523,20 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
       guards.requireNoReversedMoneyLeg();
     }
     OriginalSaleRecord paid = linked ? lastSettlementRecord : NO_SETTLEMENT;
-    // a linked refund returns the card payments; a gift-card-only sale has none, and its
-    // refund returns the stored value payment, as it always did
+    // a linked refund returns the card payments and the Bilt rewards payments; a gift-card-only
+    // sale has neither, and its refund returns the stored value payment, as it always did. The
+    // rewards payments come first here so that, sent newest first, they follow the cards as in a
+    // void
     List<ReversalMovement> targets = new ArrayList<>();
+    for (BiltRewardsPaymentRecord payment : paid.getBiltRewardsPayments()) {
+      targets.add(
+          new ReversalMovement(
+              ReversalStep.BILT_REWARDS,
+              payment.getPoiTransactionId(),
+              payment.getPoiTransactionTimestamp(),
+              payment.getAmount(),
+              TenderType.BILT_REWARDS));
+    }
     for (CardPaymentRecord payment : paid.getCardPayments()) {
       targets.add(
           new ReversalMovement(
@@ -1458,7 +1544,8 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
               payment.getPoiTransactionId(),
               payment.getPoiTransactionTimestamp(),
               payment.getAmount(),
-              TenderType.CARD));
+              TenderType.CARD,
+              payment.getBiltRewardsAmount()));
     }
     if (targets.isEmpty() && paid.getStoredValuePoiTransactionId() != null) {
       targets.add(
@@ -1479,9 +1566,13 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
       throw invalidState(
           "refund(amount) cannot choose between the "
               + targets.size()
-              + " card payments of this payment; refund() refunds every one in full, or "
+              + (paid.getBiltRewardsPayments().isEmpty()
+                  ? " card payments"
+                  : " card and Bilt rewards payments")
+              + " of this payment; refund() refunds every one in full, or "
               + "settle() with return lines and a RefundAllocation.card(amount, "
-              + "poiTransactionId, timestamp) per card payment refunds part of them");
+              + "poiTransactionId, timestamp) per card payment (RefundAllocation.biltRewards "
+              + "for a Bilt rewards payment) refunds part of them");
     }
     boolean awardReversed = linked && guards.awardReversed();
     // a full refund sends one refund per card payment, newest first like a void, and skips
@@ -1493,15 +1584,7 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
     for (int i = targets.size() - 1; linked && i >= 0; i--) {
       ReversalMovement target = targets.get(i);
       if (amount != null || !guards.refundedInFull(target.getPoiTransactionId())) {
-        originals.add(
-            amount == null
-                ? target
-                : new ReversalMovement(
-                    ReversalStep.CARD,
-                    target.getPoiTransactionId(),
-                    target.getPoiTransactionTimestamp(),
-                    amount,
-                    target.getTender()));
+        originals.add(amount == null ? target : target.withAmount(amount));
       }
     }
     if (originals.isEmpty() && (awardReversed || paid.getAwardPoiTransactionId() == null)) {
@@ -1690,6 +1773,7 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
     return ReversalMovement.ofSale(
         originalSale.getStoredValueLoads(),
         cardRefs(originalSale),
+        biltRewardsRefs(originalSale),
         PoiRef.ofNullable(
             originalSale.getStoredValuePoiTransactionId(),
             originalSale.getStoredValuePoiTransactionTimestamp()),
@@ -1712,9 +1796,23 @@ final class NexoTerminalShopperSession extends AbstractShopperSession
           PoiRef.ofNullable(
               payment.getPoiTransactionId(),
               payment.getPoiTransactionTimestamp(),
-              payment.getAmount()));
+              payment.getAmount(),
+              payment.getBiltRewardsAmount()));
     }
     return cards;
+  }
+
+  /** The sale's Bilt rewards payments as POI references, in the order they were made. */
+  private static List<PoiRef> biltRewardsRefs(OriginalSaleRecord originalSale) {
+    List<PoiRef> payments = new ArrayList<>();
+    for (BiltRewardsPaymentRecord payment : originalSale.getBiltRewardsPayments()) {
+      payments.add(
+          PoiRef.ofNullable(
+              payment.getPoiTransactionId(),
+              payment.getPoiTransactionTimestamp(),
+              payment.getAmount()));
+    }
+    return payments;
   }
 
   private Set<ReversalMovement.Key> priorSaleVoidProgress(OriginalSaleRecord originalSale) {

@@ -103,8 +103,7 @@ loadScripts(document, 'script');</script>
  from the flow the handler is registered on.
 
  <p>A void reverses the known legs in this order: <a href="#STORED_VALUE_LOAD"><code>STORED_VALUE_LOAD</code></a>, <a href="#CARD"><code>CARD</code></a>,
- <a href="#STORED_VALUE"><code>STORED_VALUE</code></a>, <a href="#REDEMPTION"><code>REDEMPTION</code></a>, <a href="#REBATE"><code>REBATE</code></a>, <a href="#AWARD"><code>AWARD</code></a>. A refund flow has at
- most two steps: <a href="#CARD"><code>CARD</code></a> (the tender refund) and <a href="#AWARD"><code>AWARD</code></a>.</div>
+ <a href="#BILT_REWARDS"><code>BILT_REWARDS</code></a>, <a href="#STORED_VALUE"><code>STORED_VALUE</code></a>, <a href="#REDEMPTION"><code>REDEMPTION</code></a>, <a href="#REBATE"><code>REBATE</code></a>, <a href="#AWARD"><code>AWARD</code></a>. A refund flow has at most three: <a href="#CARD"><code>CARD</code></a> (the tender refund), <a href="#BILT_REWARDS"><code>BILT_REWARDS</code></a> and <a href="#AWARD"><code>AWARD</code></a>.</div>
 </section>
 <section class="summary">
 <ul class="summary-list">
@@ -129,24 +128,29 @@ loadScripts(document, 'script');</script>
 <div class="col-last even-row-color">
 <div class="block">The loyalty award (Nexo <code>LoyaltyRequest</code> <code>AwardRefund</code>).</div>
 </div>
-<div class="col-first odd-row-color"><code><a href="#CARD" class="member-name-link">CARD</a></code></div>
+<div class="col-first odd-row-color"><code><a href="#BILT_REWARDS" class="member-name-link">BILT_REWARDS</a></code></div>
 <div class="col-last odd-row-color">
+<div class="block">A Bilt rewards payment: a payment the terminal paid entirely with Bilt rewards (implicit
+ loyalty, <code>biltRewardsAmount</code> equal to its authorized amount).</div>
+</div>
+<div class="col-first even-row-color"><code><a href="#CARD" class="member-name-link">CARD</a></code></div>
+<div class="col-last even-row-color">
 <div class="block">The card payment leg.</div>
 </div>
-<div class="col-first even-row-color"><code><a href="#REBATE" class="member-name-link">REBATE</a></code></div>
-<div class="col-last even-row-color">
+<div class="col-first odd-row-color"><code><a href="#REBATE" class="member-name-link">REBATE</a></code></div>
+<div class="col-last odd-row-color">
 <div class="block">The committed rebate redemption (Nexo <code>LoyaltyRequest</code> <code>RebateRefund</code>).</div>
 </div>
-<div class="col-first odd-row-color"><code><a href="#REDEMPTION" class="member-name-link">REDEMPTION</a></code></div>
-<div class="col-last odd-row-color">
+<div class="col-first even-row-color"><code><a href="#REDEMPTION" class="member-name-link">REDEMPTION</a></code></div>
+<div class="col-last even-row-color">
 <div class="block">The committed point/reward redemption (Nexo <code>LoyaltyRequest</code> <code>RedemptionRefund</code>).</div>
 </div>
-<div class="col-first even-row-color"><code><a href="#STORED_VALUE" class="member-name-link">STORED_VALUE</a></code></div>
-<div class="col-last even-row-color">
+<div class="col-first odd-row-color"><code><a href="#STORED_VALUE" class="member-name-link">STORED_VALUE</a></code></div>
+<div class="col-last odd-row-color">
 <div class="block">The stored value (gift card) leg of a split tender (Nexo <code>ReversalRequest</code>).</div>
 </div>
-<div class="col-first odd-row-color"><code><a href="#STORED_VALUE_LOAD" class="member-name-link">STORED_VALUE_LOAD</a></code></div>
-<div class="col-last odd-row-color">
+<div class="col-first even-row-color"><code><a href="#STORED_VALUE_LOAD" class="member-name-link">STORED_VALUE_LOAD</a></code></div>
+<div class="col-last even-row-color">
 <div class="block">A stored value activation or load fulfilled for a purchased basket line.</div>
 </div>
 </div>
@@ -208,6 +212,16 @@ the order they are declared.</div>
 <div class="block">The card payment leg. A void reverses it (Nexo <code>ReversalRequest</code> — full, pre-settlement);
  a refund returns money against it (Nexo <code>PaymentRequest</code> of type <code>Refund</code> —
  amount-based and repeatable, and the leg an unlinked refund's money goes back to).</div>
+</section>
+</li>
+<li>
+<section class="detail" id="BILT_REWARDS">
+<h3>BILT_REWARDS</h3>
+<div class="member-signature"><span class="modifiers">public static final</span>&nbsp;<span class="return-type"><a href="ReversalStep.html" title="enum class in com.bilt.pos.session">ReversalStep</a></span>&nbsp;<span class="element-name">BILT_REWARDS</span></div>
+<div class="block">A Bilt rewards payment: a payment the terminal paid entirely with Bilt rewards (implicit
+ loyalty, <code>biltRewardsAmount</code> equal to its authorized amount). It is reversed and refunded
+ with the same Nexo requests as <a href="#CARD"><code>CARD</code></a>, by its POI reference; the terminal returns the
+ rewards. A card payment that rewards paid only part of stays a <a href="#CARD"><code>CARD</code></a> leg.</div>
 </section>
 </li>
 <li>

@@ -97,7 +97,12 @@ loadScripts(document, 'script');</script>
  SettlementResult.getCardPayments()</code>); each is one nexo <code>PaymentRequest</code>.
 
  <p>Every reference is as the terminal reported it, so each may be <code>null</code> when the response
- did not carry it.</div>
+ did not carry it.
+
+ <p>Bilt rewards can pay part of a card payment (implicit loyalty with multi-tender off on the
+ terminal). Then <a href="#getAmount()"><code>getAmount()</code></a> is still everything the payment authorized, which is what a
+ void reverses, and <a href="#getBiltRewardsAmount()"><code>getBiltRewardsAmount()</code></a> is the rewards part of it: the card paid
+ <a href="#getCardAmount()"><code>getCardAmount()</code></a>. A payment the rewards paid in full is not a card payment; see <a href="BiltRewardsPaymentResult.html" title="class in com.bilt.pos.session.payment"><code>BiltRewardsPaymentResult</code></a>.</div>
 </section>
 <section class="summary">
 <ul class="summary-list">
@@ -138,11 +143,23 @@ loadScripts(document, 'script');</script>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a></code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getAmount()" class="member-name-link">getAmount</a>()</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Amount the terminal authorized for this payment, cashback included.</div>
+<div class="block">Amount the terminal authorized for this payment, cashback included, and Bilt rewards included
+ when they paid part of it (<a href="#getBiltRewardsAmount()"><code>getBiltRewardsAmount()</code></a>).</div>
 </div>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a></code></div>
 <div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getApprovalCode()" class="member-name-link">getApprovalCode</a>()</code></div>
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a></code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getBiltRewardsAmount()" class="member-name-link">getBiltRewardsAmount</a>()</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">The part of <a href="#getAmount()"><code>getAmount()</code></a> the terminal paid with Bilt rewards, as it reported it in
+ <code>biltRewardsAmount</code>; zero when the card paid it all.</div>
+</div>
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a></code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getCardAmount()" class="member-name-link">getCardAmount</a>()</code></div>
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">The part of <a href="#getAmount()"><code>getAmount()</code></a> the card paid: the amount less <a href="#getBiltRewardsAmount()"><code>getBiltRewardsAmount()</code></a>.</div>
+</div>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="../Receipt.html" title="class in com.bilt.pos.session">Receipt</a></code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getCustomerReceipt()" class="member-name-link">getCustomerReceipt</a>()</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
@@ -197,7 +214,8 @@ loadScripts(document, 'script');</script>
 <section class="detail" id="getAmount()">
 <h3>getAmount</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a></span>&nbsp;<span class="element-name">getAmount</span>()</div>
-<div class="block">Amount the terminal authorized for this payment, cashback included.</div>
+<div class="block">Amount the terminal authorized for this payment, cashback included, and Bilt rewards included
+ when they paid part of it (<a href="#getBiltRewardsAmount()"><code>getBiltRewardsAmount()</code></a>).</div>
 </section>
 </li>
 <li>
@@ -255,6 +273,21 @@ loadScripts(document, 'script');</script>
 <h3>isPartialApproval</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type">boolean</span>&nbsp;<span class="element-name">isPartialApproval</span>()</div>
 <div class="block">Whether the terminal authorized less than this payment requested.</div>
+</section>
+</li>
+<li>
+<section class="detail" id="getBiltRewardsAmount()">
+<h3>getBiltRewardsAmount</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a></span>&nbsp;<span class="element-name">getBiltRewardsAmount</span>()</div>
+<div class="block">The part of <a href="#getAmount()"><code>getAmount()</code></a> the terminal paid with Bilt rewards, as it reported it in
+ <code>biltRewardsAmount</code>; zero when the card paid it all.</div>
+</section>
+</li>
+<li>
+<section class="detail" id="getCardAmount()">
+<h3>getCardAmount</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a></span>&nbsp;<span class="element-name">getCardAmount</span>()</div>
+<div class="block">The part of <a href="#getAmount()"><code>getAmount()</code></a> the card paid: the amount less <a href="#getBiltRewardsAmount()"><code>getBiltRewardsAmount()</code></a>.</div>
 </section>
 </li>
 </ul>

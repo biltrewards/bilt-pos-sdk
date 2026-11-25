@@ -127,6 +127,15 @@ Example second payment, after $20 on the first card of a $94.50 sale:
 
 With the Java SDK, `SettlementOptions.cardPayments(...)` sends these for you: see [split card payments](./checkout-session-integration.md#variant-split-card-payments).
 
+### Bilt rewards inside a payment
+
+With implicit loyalty, the terminal can pay part or all of a payment with the member's Bilt rewards (points). nexo has no field for rewards spent inside a payment, so the terminal reports them in `AdditionalResponse` as **`biltRewardsAmount`**: the value of the rewards, in the payment's currency with two decimals. `AuthorizedAmount` still includes the rewards, so the card paid `AuthorizedAmount − biltRewardsAmount`. The key is absent when no rewards were spent; treat a response without it as all card.
+
+- **Multi-tender on (the default):** the terminal answers the rewards as a leg of their own, a `Result=Partial` response with `biltRewardsAmount` equal to `AuthorizedAmount` and no card, acquirer data or receipt. Its `POITransactionID` references the rewards for a later void or refund. Collect the rest with split payments, as above: `PaidAmount` includes the rewards.
+- **Multi-tender off:** one payment covers rewards and card. `biltRewardsAmount` is the rewards part of `AuthorizedAmount`.
+
+A reversal or refund of such a payment reports what went back to the rewards the same way, when the terminal knows it.
+
 ---
 
 ## Payment response
@@ -265,6 +274,7 @@ The `AdditionalResponse` field contains URL-encoded key-value pairs with additio
 | `authorizationResult` | The authorization result from the payment processor. | `Approved`, `Declined`, `PartialApproval` |
 | `accountType` | The card account type used for the transaction. Useful for determining if a credit or debit card was used. | `CREDIT`, `DEBIT`, `PINLESS_DEBIT`, `PLCC`, `ALTERNATE_TYPE` |
 | `currentBalance` | For stored value cards, the remaining balance after the transaction. | `45.00` |
+| `biltRewardsAmount` | The part of `AuthorizedAmount` the terminal paid with the member's Bilt rewards (implicit loyalty); absent when none. Equal to `AuthorizedAmount` for a payment the rewards paid in full. See [Bilt rewards inside a payment](#bilt-rewards-inside-a-payment). | `40.00` |
 | `signatureBase64` | Base64-encoded signature image if the transaction required signature capture. | `iVBORw0KGgoAAAANSUhEUgAA...` |
 | `failureReason` | Human-readable description of why the transaction failed (only present on failures). | `Card declined`, `Insufficient funds` |
 
