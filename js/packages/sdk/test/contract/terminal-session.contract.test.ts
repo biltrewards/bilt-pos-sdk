@@ -15,7 +15,12 @@ import {
   type StepInfo,
   type TerminalShopperSession,
 } from '../../src/index';
-import { FakeTerminal, paymentEcho, paymentApproving } from './fake-terminal';
+import {
+  FakeTerminal,
+  paymentEcho,
+  paymentApproving,
+  paymentWithBiltRewards,
+} from './fake-terminal';
 import {
   buildHost,
   hostAvailable,
@@ -287,6 +292,53 @@ describe.skipIf(!hostAvailable)('terminal sessions over the Terminal Bridge engi
       ]);
       expect(result.cardAmountCharged).toBe('90.00');
       expect(paymentRequests()[1]).toContain('"SplitPaymentFlag":true');
+      await session.end();
+    });
+
+    it('reports a Bilt rewards leg apart from the cards and voids it', async () => {
+      terminal.reply('Payment', paymentWithBiltRewards(0.4));
+      terminal.reply(
+        'Reversal',
+        '{"SaleToPOIResponse":{"ReversalResponse":{"Response":{"Result":"Success"}}}}',
+      );
+      const session = await lane();
+      const handler = vi.fn(
+        (_partial: PartialCardApproval, _step: StepInfo) => 'ANOTHER_CARD' as const,
+      );
+
+      const result = await session.settle(undefined, { onPartialCardApproval: handler });
+
+      const partial = handler.mock.calls[0]![0];
+      expect(partial.biltRewardsAmount).toBe('36.00');
+      expect(partial.biltRewardsPayment).toMatchObject({
+        amount: '36.00',
+        poiTransactionId: 'ATT-1',
+      });
+      expect(partial.cardPayments).toEqual([]);
+      expect(result.cardPayments.map((p) => [p.poiTransactionId, p.cardAmount])).toEqual([
+        ['POI-PAY-1', '54.00'],
+      ]);
+      expect(result.biltRewardsPayments).toEqual([
+        {
+          amount: '36.00',
+          poiTransactionId: 'ATT-1',
+          poiTransactionTimestamp: '2026-07-20T10:00:02Z',
+        },
+      ]);
+      expect(result.biltRewardsAmount).toBe('36.00');
+      expect(result.cardAmountCharged).toBe('54.00');
+      expect(result.finalBasket.biltRewardsTotal).toBe('36.00');
+      expect(paymentRequests()[1]).toContain('"PaidAmount":36');
+
+      const voided = await session.voidTransaction();
+      expect(voided.cardReversals.map((c) => c.originalPoiTransactionId)).toEqual(['POI-PAY-1']);
+      expect(
+        voided.biltRewardsReversals.map((c) => [c.tenderType, c.originalPoiTransactionId]),
+      ).toEqual([['BILT_REWARDS', 'ATT-1']]);
+      expect(voided.reversedAmountByTender.map((t) => [t.tender, t.amount])).toEqual([
+        ['CARD', '54.00'],
+        ['BILT_REWARDS', '36.00'],
+      ]);
       await session.end();
     });
 

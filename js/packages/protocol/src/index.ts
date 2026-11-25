@@ -97,6 +97,8 @@ export type AbandonedSettlementRecord = Schemas['AbandonedSettlementRecord'];
 export type OriginalSaleRecord = Schemas['OriginalSaleRecord'];
 export type CardPaymentRecord = Schemas['CardPaymentRecord'];
 export type CardPaymentResult = Schemas['CardPaymentResult'];
+export type BiltRewardsPaymentRecord = Schemas['BiltRewardsPaymentRecord'];
+export type BiltRewardsPaymentResult = Schemas['BiltRewardsPaymentResult'];
 
 export type RebateRedemptionResult = Schemas['RebateRedemptionResult'];
 export type PointRedemptionResult = Schemas['PointRedemptionResult'];

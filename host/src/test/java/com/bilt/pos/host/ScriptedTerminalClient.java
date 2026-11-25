@@ -75,6 +75,23 @@ final class ScriptedTerminalClient implements TerminalClient {
         .replace("\"Result\":\"Success\"", "\"Result\":\"Partial\"");
   }
 
+  /**
+   * The terminal's Bilt rewards leg with multi-tender on: a {@code Partial} for the rewards value,
+   * reported in {@code biltRewardsAmount}, with no card data.
+   */
+  static String paymentBiltRewardsPartial(String poiTxn, String rewards) {
+    return "{\"SaleToPOIResponse\":{\"PaymentResponse\":{"
+        + "\"Response\":{\"Result\":\"Partial\",\"AdditionalResponse\":\"biltRewardsAmount="
+        + rewards
+        + "\"},"
+        + "\"POIData\":{\"POITransactionID\":{\"TransactionID\":\""
+        + poiTxn
+        + "\",\"TimeStamp\":\"2026-07-20T10:00:02Z\"}},"
+        + "\"PaymentResult\":{\"AmountsResp\":{\"Currency\":\"USD\",\"AuthorizedAmount\":"
+        + rewards
+        + "}}}}}";
+  }
+
   static final String REVERSAL_OK =
       "{\"SaleToPOIResponse\":{\"ReversalResponse\":{\"Response\":{\"Result\":\"Success\"}}}}";
 

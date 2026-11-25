@@ -55,6 +55,7 @@ public final class SimulatedTerminalClient implements TerminalClient {
 
   private static final String DEFAULT_MEMBERS = "/com/bilt/pos/nexo/sim/members.json";
   private static final String VISA_MASKED_PAN = "411111******1111";
+  private static final String BILT_REWARDS_AMOUNT = "biltRewardsAmount";
   private static final String VISA_TOKEN = "simulated-visa-token";
   private static final ObjectMapper MAPPER =
       new ObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
@@ -446,22 +447,39 @@ public final class SimulatedTerminalClient implements TerminalClient {
     if (partialCardApproval) {
       amount = partialApprovedAmount(amount);
     }
+    // implicit loyalty: the member's Bilt rewards pay all (a points leg, answered Partial with no
+    // card in it) or part (a card payment with rewards in it) of the payment
+    boolean biltRewardsOnly = !storedValuePayment && biltRewardsLeg(amount);
+    BigDecimal biltRewards = null;
+    if (biltRewardsOnly) {
+      amount = biltRewardsLegAmount(amount);
+      biltRewards = amount;
+    } else if (!storedValuePayment && !partialCardApproval && biltRewardsPart(amount)) {
+      biltRewards = biltRewardsPartAmount(amount);
+    }
     String currency = paymentCurrency(request);
     ObjectNode body = successBody();
-    if (partialCardApproval) {
+    if (partialCardApproval || biltRewardsOnly) {
       ((ObjectNode) body.get("Response")).put("Result", "Partial");
+    }
+    if (biltRewards != null) {
+      ((ObjectNode) body.get("Response")).put("AdditionalResponse", biltRewardsAmount(biltRewards));
     }
     ObjectNode paymentResult = body.putObject("PaymentResult");
     paymentResult
         .putObject("AmountsResp")
         .put("AuthorizedAmount", amount.doubleValue())
         .put("Currency", currency);
-    ObjectNode acquirerData = paymentResult.putObject("PaymentAcquirerData");
-    acquirerData.put("ApprovalCode", "SIM-APPROVED");
-    acquirerData
-        .putObject("AcquirerTransactionID")
-        .put("TransactionID", "SIM-ACQ-" + (transactionCounter + 1));
-    if (storedValuePayment) {
+    if (!biltRewardsOnly) {
+      ObjectNode acquirerData = paymentResult.putObject("PaymentAcquirerData");
+      acquirerData.put("ApprovalCode", "SIM-APPROVED");
+      acquirerData
+          .putObject("AcquirerTransactionID")
+          .put("TransactionID", "SIM-ACQ-" + (transactionCounter + 1));
+    }
+    if (biltRewardsOnly) {
+      // the rewards leg carries no card, acquirer data or receipt
+    } else if (storedValuePayment) {
       ((ObjectNode) body.get("Response"))
           .put("AdditionalResponse", "currentBalance=" + storedValueBalance.toPlainString());
     } else {
@@ -481,6 +499,7 @@ public final class SimulatedTerminalClient implements TerminalClient {
             amount,
             currency);
     entry.paymentType = PaymentTypeEnum.NORMAL;
+    entry.biltRewards = biltRewards;
     if (storedValuePayment) {
       entry.storedValueId = storedValueId;
     }
@@ -527,6 +546,11 @@ public final class SimulatedTerminalClient implements TerminalClient {
     String currency =
         parts.currency == null ? original == null ? "USD" : original.currency : parts.currency;
     ObjectNode body = successBody();
+    BigDecimal biltRewardsReturned = biltRewardsReturned(original, amount);
+    if (biltRewardsReturned != null) {
+      ((ObjectNode) body.get("Response"))
+          .put("AdditionalResponse", biltRewardsAmount(biltRewardsReturned));
+    }
     body.putObject("PaymentResult")
         .putObject("AmountsResp")
         .put("AuthorizedAmount", amount.doubleValue())
@@ -740,6 +764,10 @@ public final class SimulatedTerminalClient implements TerminalClient {
       storedValueBalances.merge(original.storedValueId, original.amount, BigDecimal::add);
     }
     ObjectNode body = successBody();
+    if (original.biltRewards != null) {
+      ((ObjectNode) body.get("Response"))
+          .put("AdditionalResponse", biltRewardsAmount(original.biltRewards));
+    }
     body.put("ReversedAmount", original.amount.doubleValue());
     body.putObject("OriginalPOITransaction")
         .putObject("POITransactionID")
@@ -1197,6 +1225,60 @@ public final class SimulatedTerminalClient implements TerminalClient {
     return centsRemainder(amount) == 456;
   }
 
+  /**
+   * Whether the member's Bilt rewards pay part of a card payment of this amount and the terminal
+   * answers that part as a points leg of its own: its amount in cents ends in {@code 789} (for
+   * example, {@code $17.89}). The leg is a {@code Partial} for 40% of the amount, rounded down to
+   * the cent, all of it Bilt rewards, with no card in it; the register collects the rest with
+   * cards.
+   */
+  private static boolean biltRewardsLeg(BigDecimal amount) {
+    return centsRemainder(amount) == 789;
+  }
+
+  /** The 40% of the amount a Bilt rewards leg pays, rounded down to the cent. */
+  private static BigDecimal biltRewardsLegAmount(BigDecimal amount) {
+    return amount.multiply(new BigDecimal("0.4")).setScale(2, java.math.RoundingMode.DOWN);
+  }
+
+  /**
+   * Whether Bilt rewards pay part of an approved card payment of this amount, as with multi-tender
+   * off on the terminal: its amount in cents ends in {@code 321} (for example, {@code $13.21}). The
+   * payment is approved in full, 25% of it, rounded down to the cent, Bilt rewards.
+   */
+  private static boolean biltRewardsPart(BigDecimal amount) {
+    return centsRemainder(amount) == 321;
+  }
+
+  /** The 25% of the amount Bilt rewards pay in a card payment, rounded down to the cent. */
+  private static BigDecimal biltRewardsPartAmount(BigDecimal amount) {
+    return amount.multiply(new BigDecimal("0.25")).setScale(2, java.math.RoundingMode.DOWN);
+  }
+
+  /**
+   * The Bilt rewards a linked refund of {@code amount} returns: all of it for a Bilt rewards leg,
+   * the rewards part of a card payment refunded in full, else none ({@code null}).
+   */
+  private static BigDecimal biltRewardsReturned(LedgerEntry original, BigDecimal amount) {
+    if (original == null || original.biltRewards == null) {
+      return null;
+    }
+    if (original.biltRewards.compareTo(original.amount) == 0) {
+      return amount;
+    }
+    return original.refunded.compareTo(original.amount) == 0
+            && amount.compareTo(original.amount) == 0
+        ? original.biltRewards
+        : null;
+  }
+
+  /** The {@code AdditionalResponse} entry reporting {@code amount} of Bilt rewards. */
+  private static String biltRewardsAmount(BigDecimal amount) {
+    return BILT_REWARDS_AMOUNT
+        + "="
+        + amount.setScale(2, java.math.RoundingMode.HALF_UP).toPlainString();
+  }
+
   /** The 60% of a partially approved amount, rounded down to the cent. */
   private static BigDecimal partialApprovedAmount(BigDecimal amount) {
     return amount.multiply(new BigDecimal("0.6")).setScale(2, java.math.RoundingMode.DOWN);
@@ -1551,6 +1633,8 @@ public final class SimulatedTerminalClient implements TerminalClient {
     private LoyaltyTransactionTypeEnum loyaltyType;
     private int pointsEffect;
     private int pointsUsed;
+    // the part of amount Bilt rewards paid, or null
+    private BigDecimal biltRewards;
     private boolean reversed;
     private boolean loyaltyRefunded;
 

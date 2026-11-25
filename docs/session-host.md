@@ -169,7 +169,14 @@ The simulator has no customer delay and confirms input prompts by default. A pay
 amount in cents ends in `123` declines (for example, `$41.23`); `$41.24` approves. A card payment
 whose amount in cents ends in `456` (for example, `$104.56`) is approved for 60% of the requested
 amount, rounded down to the cent (`$62.73`), with `Result=Partial`: use it to try split and partial
-card payments. The rule applies to card payments only, not to gift-card charges or refunds. Like
+card payments. The rule applies to card payments only, not to gift-card charges or refunds. Two
+more card rules stand in for a terminal with implicit loyalty: an amount whose cents end in `789`
+(for example, `$17.89`) comes back as the terminal's Bilt rewards leg, a `Result=Partial` for 40%
+of the amount rounded down to the cent (`$7.15`) with `AdditionalResponse=biltRewardsAmount=7.15`
+and no card data, so the register collects the rest with card payments; an amount ending in `321`
+(for example, `$13.21`) is approved in full with 25% of it in Bilt rewards
+(`biltRewardsAmount=3.30`). A reversal of either reports its rewards the same way, as does a refund
+of a rewards leg or the full refund of a mixed payment. Like
 the terminal's parser, the simulator refuses a payment that sets `SplitPaymentFlag` without
 `AmountsReq.PaidAmount`, or with a `PaymentType` other than `Normal`, with the `NotAllowed` error
 condition. The simulated terminal is reported reachable, but no network endpoint is contacted.

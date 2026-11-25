@@ -3,6 +3,7 @@ package com.bilt.pos.nexo.sim;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -342,6 +343,95 @@ class SimulatedTerminalClientTest {
             .getResponse()
             .getResult()
             .toValue());
+  }
+
+  @Test
+  void answersTheDocumentedRewardsAmountAsABiltRewardsLeg() throws Exception {
+    SimulatedTerminalClient terminal = SimulatedTerminalClient.builder().build();
+    SaleToPOIResponse leg =
+        terminal
+            .request(request("Payment", "rewards", paymentBody("17.89", null)))
+            .getSaleToPOIResponse();
+
+    assertEquals("Partial", leg.getPaymentResponse().getResponse().getResult().toValue());
+    // 7.156 rounds down to the cent
+    assertEquals(
+        7.15, leg.getPaymentResponse().getPaymentResult().getAmountsResp().getAuthorizedAmount());
+    assertEquals(
+        "biltRewardsAmount=7.15", leg.getPaymentResponse().getResponse().getAdditionalResponse());
+    assertNull(leg.getPaymentResponse().getPaymentResult().getPaymentInstrumentData());
+    assertNull(leg.getPaymentResponse().getPaymentResult().getPaymentAcquirerData());
+    String poiId = leg.getPaymentResponse().getPoiData().getPoiTransactionID().getTransactionID();
+
+    // a refund of the leg returns rewards, and so does the reversal of another
+    SaleToPOIResponse refund =
+        terminal
+            .request(request("Payment", "rewards-refund", paymentBody("2.00", poiId)))
+            .getSaleToPOIResponse();
+    assertEquals(
+        "biltRewardsAmount=2.00",
+        refund.getPaymentResponse().getResponse().getAdditionalResponse());
+    String otherPoiId =
+        terminal
+            .request(request("Payment", "rewards-2", paymentBody("17.89", null)))
+            .getSaleToPOIResponse()
+            .getPaymentResponse()
+            .getPoiData()
+            .getPoiTransactionID()
+            .getTransactionID();
+    SaleToPOIResponse reversal =
+        terminal
+            .request(request("Reversal", "rewards-void", reversalBody(otherPoiId)))
+            .getSaleToPOIResponse();
+    assertEquals(
+        "biltRewardsAmount=7.15",
+        reversal.getReversalResponse().getResponse().getAdditionalResponse());
+  }
+
+  @Test
+  void approvesTheDocumentedMixedAmountWithARewardsPart() throws Exception {
+    SimulatedTerminalClient terminal = SimulatedTerminalClient.builder().build();
+    SaleToPOIResponse mixed =
+        terminal
+            .request(request("Payment", "mixed", paymentBody("13.21", null)))
+            .getSaleToPOIResponse();
+
+    assertEquals("Success", mixed.getPaymentResponse().getResponse().getResult().toValue());
+    assertEquals(
+        13.21,
+        mixed.getPaymentResponse().getPaymentResult().getAmountsResp().getAuthorizedAmount());
+    // 3.3025 rounds down to the cent
+    assertEquals(
+        "biltRewardsAmount=3.30", mixed.getPaymentResponse().getResponse().getAdditionalResponse());
+    assertEquals(
+        "Visa",
+        mixed
+            .getPaymentResponse()
+            .getPaymentResult()
+            .getPaymentInstrumentData()
+            .getCardData()
+            .getPaymentBrand());
+    String poiId = mixed.getPaymentResponse().getPoiData().getPoiTransactionID().getTransactionID();
+
+    // a full refund returns the rewards part, a partial one does not report a split
+    SaleToPOIResponse partialRefund =
+        terminal
+            .request(request("Payment", "mixed-refund-1", paymentBody("1.00", poiId)))
+            .getSaleToPOIResponse();
+    assertNull(partialRefund.getPaymentResponse().getResponse().getAdditionalResponse());
+    SaleToPOIResponse other =
+        terminal
+            .request(request("Payment", "mixed-2", paymentBody("13.21", null)))
+            .getSaleToPOIResponse();
+    String otherPoiId =
+        other.getPaymentResponse().getPoiData().getPoiTransactionID().getTransactionID();
+    SaleToPOIResponse fullRefund =
+        terminal
+            .request(request("Payment", "mixed-refund-2", paymentBody("13.21", otherPoiId)))
+            .getSaleToPOIResponse();
+    assertEquals(
+        "biltRewardsAmount=3.30",
+        fullRefund.getPaymentResponse().getResponse().getAdditionalResponse());
   }
 
   @Test

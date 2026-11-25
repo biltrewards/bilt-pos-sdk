@@ -14,9 +14,13 @@ import java.time.Instant;
 import java.util.Objects;
 
 /**
- * One tender leg a void reversed or a refund returned — a card payment or a stored value payment —
- * with the terminal's own reference and receipts for it. A sale with several card payments gets one
- * per card payment, so the register can print and store every receipt.
+ * One tender leg a void reversed or a refund returned — a card payment, a Bilt rewards payment or a
+ * stored value payment — with the terminal's own reference and receipts for it. A sale with several
+ * card payments gets one per card payment, so the register can print and store every receipt.
+ *
+ * <p>When Bilt rewards paid part of a card payment, its card leg's {@link #getAmount()} is
+ * everything the reversal or refund returned and {@link #getBiltRewardsAmount()} is the part that
+ * went back to the member's rewards.
  */
 public final class TenderMovement {
 
@@ -29,6 +33,7 @@ public final class TenderMovement {
   private final String serviceId;
   private final Receipt customerReceipt;
   private final Receipt merchantReceipt;
+  private final BigDecimal biltRewardsAmount;
 
   private TenderMovement(Builder builder) {
     this.tenderType = Objects.requireNonNull(builder.tenderType, "tenderType");
@@ -40,6 +45,7 @@ public final class TenderMovement {
     this.serviceId = builder.serviceId;
     this.customerReceipt = builder.customerReceipt;
     this.merchantReceipt = builder.merchantReceipt;
+    this.biltRewardsAmount = builder.biltRewardsAmount;
   }
 
   public static Builder builder() {
@@ -91,6 +97,15 @@ public final class TenderMovement {
     return merchantReceipt;
   }
 
+  /**
+   * The part of {@link #getAmount()} that went back to Bilt rewards: on a card leg, the rewards
+   * part of a card payment rewards paid only part of; on a {@link TenderType#BILT_REWARDS} leg, the
+   * whole amount. {@code null} when none did, or when it is not known.
+   */
+  public BigDecimal getBiltRewardsAmount() {
+    return biltRewardsAmount;
+  }
+
   /** Builder for {@link TenderMovement}. Intended for SDK use. */
   public static final class Builder {
 
@@ -103,6 +118,7 @@ public final class TenderMovement {
     private String serviceId;
     private Receipt customerReceipt;
     private Receipt merchantReceipt;
+    private BigDecimal biltRewardsAmount;
 
     private Builder() {}
 
@@ -148,6 +164,11 @@ public final class TenderMovement {
 
     public Builder merchantReceipt(Receipt merchantReceipt) {
       this.merchantReceipt = merchantReceipt;
+      return this;
+    }
+
+    public Builder biltRewardsAmount(BigDecimal biltRewardsAmount) {
+      this.biltRewardsAmount = biltRewardsAmount;
       return this;
     }
 

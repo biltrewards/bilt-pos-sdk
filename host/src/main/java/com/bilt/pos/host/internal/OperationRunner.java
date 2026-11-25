@@ -552,6 +552,7 @@ public final class OperationRunner {
       return true;
     }
     return !originalSale.getCardPayments().isEmpty()
+        || !originalSale.getBiltRewardsPayments().isEmpty()
         || originalSale.getStoredValuePoiTransactionId() != null
         || !originalSale.getStoredValueLoads().isEmpty();
   }

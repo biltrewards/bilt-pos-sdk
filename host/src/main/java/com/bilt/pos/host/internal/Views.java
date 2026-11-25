@@ -39,6 +39,7 @@ import com.bilt.pos.session.identity.VasService;
 import com.bilt.pos.session.input.MenuSelection;
 import com.bilt.pos.session.input.PinResult;
 import com.bilt.pos.session.input.Signature;
+import com.bilt.pos.session.payment.BiltRewardsPaymentResult;
 import com.bilt.pos.session.payment.CardPaymentResult;
 import com.bilt.pos.session.payment.EarnedReward;
 import com.bilt.pos.session.payment.GiftCardPaymentResult;
@@ -103,6 +104,7 @@ public final class Views {
     Json.putMoney(node, "pointDiscountTotal", basket.getPointDiscountTotal());
     Json.putMoney(node, "storedValueTotal", basket.getStoredValueTotal());
     Json.putMoney(node, "cardPaymentTotal", basket.getCardPaymentTotal());
+    Json.putMoney(node, "biltRewardsTotal", basket.getBiltRewardsTotal());
     Json.putMoney(node, "externalPaymentTotal", basket.getExternalPaymentTotal());
     Json.putInstant(node, "updatedAt", basket.getUpdatedAt());
     return node;
@@ -325,6 +327,8 @@ public final class Views {
     node.put("cardAmountCharged", moneyOrZero(result.getCardAmountCharged()));
     node.put("externalPaymentAmount", moneyOrZero(result.getExternalPaymentAmount()));
     node.set("cardPayments", cardPayments(result.getCardPayments()));
+    node.put("biltRewardsAmount", moneyOrZero(result.getBiltRewardsAmount()));
+    node.set("biltRewardsPayments", biltRewardsPayments(result.getBiltRewardsPayments()));
     Json.putText(node, "approvalCode", result.getApprovalCode());
     Json.putText(node, "acquirerTransactionId", result.getAcquirerTransactionId());
     Json.putText(node, "paymentBrand", result.getPaymentBrand());
@@ -362,6 +366,7 @@ public final class Views {
     Json.putInstant(
         node, "redemptionPoiTransactionTimestamp", result.getRedemptionPoiTransactionTimestamp());
     node.put("cardRefundedAmount", moneyOrZero(result.getCardRefundedAmount()));
+    node.put("biltRewardsRefundedAmount", moneyOrZero(result.getBiltRewardsRefundedAmount()));
     node.put("storedValueRefundedAmount", moneyOrZero(result.getStoredValueRefundedAmount()));
     node.put("externalRefundedAmount", moneyOrZero(result.getExternalRefundedAmount()));
     node.put("loyaltyRefundedAmount", moneyOrZero(result.getLoyaltyRefundedAmount()));
@@ -383,7 +388,27 @@ public final class Views {
     node.put("shortfall", moneyOrZero(partial.getShortfall()));
     node.put("amountDue", moneyOrZero(partial.getAmountDue()));
     node.set("cardPayments", cardPayments(partial.getCardPayments()));
+    node.put("biltRewardsAmount", moneyOrZero(partial.getBiltRewardsAmount()));
+    if (partial.getBiltRewardsPayment() != null) {
+      node.set("biltRewardsPayment", biltRewardsPayment(partial.getBiltRewardsPayment()));
+    }
     node.set("movement", movement(partial.getMovement()));
+    return node;
+  }
+
+  private static ArrayNode biltRewardsPayments(List<BiltRewardsPaymentResult> payments) {
+    ArrayNode array = Json.array();
+    for (BiltRewardsPaymentResult payment : payments) {
+      array.add(biltRewardsPayment(payment));
+    }
+    return array;
+  }
+
+  private static ObjectNode biltRewardsPayment(BiltRewardsPaymentResult payment) {
+    ObjectNode node = Json.object();
+    node.put("amount", moneyOrZero(payment.getAmount()));
+    Json.putText(node, "poiTransactionId", payment.getPoiTransactionId());
+    Json.putInstant(node, "poiTransactionTimestamp", payment.getPoiTransactionTimestamp());
     return node;
   }
 
@@ -392,6 +417,8 @@ public final class Views {
     for (CardPaymentResult payment : payments) {
       ObjectNode node = array.addObject();
       node.put("amount", moneyOrZero(payment.getAmount()));
+      node.put("biltRewardsAmount", moneyOrZero(payment.getBiltRewardsAmount()));
+      node.put("cardAmount", moneyOrZero(payment.getCardAmount()));
       Json.putText(node, "poiTransactionId", payment.getPoiTransactionId());
       Json.putInstant(node, "poiTransactionTimestamp", payment.getPoiTransactionTimestamp());
       Json.putText(node, "approvalCode", payment.getApprovalCode());
@@ -449,6 +476,7 @@ public final class Views {
     }
     Json.putText(node, "externalTenderType", movement.getExternalTenderType());
     Json.putText(node, "externalReference", movement.getExternalReference());
+    Json.putMoney(node, "biltRewardsAmount", movement.getBiltRewardsAmount());
     Json.putText(node, "serviceId", movement.getServiceId());
     if (movement.isReversal()) {
       node.put("reversal", true);
@@ -608,6 +636,7 @@ public final class Views {
     node.put("success", result.isSuccess());
     Json.putMoney(node, "refundedAmount", result.getRefundedAmount());
     node.set("cardRefunds", tenderMovements(result.getCardRefunds()));
+    node.set("biltRewardsRefunds", tenderMovements(result.getBiltRewardsRefunds()));
     node.set("refundedAmountByTender", tenderAmounts(result.getRefundedAmountByTender()));
     Json.putText(node, "approvalCode", result.getApprovalCode());
     Json.putText(node, "poiTransactionId", result.getPoiTransactionId());
@@ -624,6 +653,7 @@ public final class Views {
     node.put("success", result.isSuccess());
     Json.putMoney(node, "reversedAmount", result.getReversedAmount());
     node.set("cardReversals", tenderMovements(result.getCardReversals()));
+    node.set("biltRewardsReversals", tenderMovements(result.getBiltRewardsReversals()));
     if (result.getStoredValueReversal() != null) {
       node.set("storedValueReversal", tenderMovement(result.getStoredValueReversal()));
     }
@@ -650,6 +680,7 @@ public final class Views {
     node.put("tenderType", movement.getTenderType().name());
     Json.putText(node, "originalPoiTransactionId", movement.getOriginalPoiTransactionId());
     Json.putMoney(node, "amount", movement.getAmount());
+    Json.putMoney(node, "biltRewardsAmount", movement.getBiltRewardsAmount());
     Json.putText(node, "poiTransactionId", movement.getPoiTransactionId());
     Json.putInstant(node, "poiTransactionTimestamp", movement.getPoiTransactionTimestamp());
     Json.putText(node, "approvalCode", movement.getApprovalCode());

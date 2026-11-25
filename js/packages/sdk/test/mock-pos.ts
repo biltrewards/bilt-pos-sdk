@@ -723,8 +723,15 @@ export class MockTerminalSession extends MockShopperSession implements TerminalS
                 shortfall,
                 amountDue: shortfall,
                 cardPayments: [
-                  { amount: approving, poiTransactionId: 'POI-1', partialApproval: true },
+                  {
+                    amount: approving,
+                    biltRewardsAmount: '0',
+                    cardAmount: approving,
+                    poiTransactionId: 'POI-1',
+                    partialApproval: true,
+                  },
                 ],
+                biltRewardsAmount: '0',
                 movement: first,
               },
               step,
@@ -768,6 +775,7 @@ export class MockTerminalSession extends MockShopperSession implements TerminalS
     return this.op('refund', async () => ({
       success: true,
       cardRefunds: [],
+      biltRewardsRefunds: [],
       refundedAmountByTender: [],
       pointsReversed: 0,
       remainingPointBalance: 0,
@@ -777,6 +785,7 @@ export class MockTerminalSession extends MockShopperSession implements TerminalS
     return this.op('refundUnlinked', async () => ({
       success: true,
       cardRefunds: [],
+      biltRewardsRefunds: [],
       refundedAmountByTender: [],
       pointsReversed: 0,
       remainingPointBalance: 0,
@@ -786,6 +795,7 @@ export class MockTerminalSession extends MockShopperSession implements TerminalS
     return this.op('voidTransaction', async () => ({
       success: true,
       cardReversals: [],
+      biltRewardsReversals: [],
       reversedAmountByTender: [],
       pointsReversed: 0,
       remainingPointBalance: 0,

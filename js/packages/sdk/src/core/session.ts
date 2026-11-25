@@ -164,6 +164,7 @@ export class ShopperSessionImpl implements ShopperSession {
       pointDiscountTotal: '0',
       storedValueTotal: '0',
       cardPaymentTotal: '0',
+      biltRewardsTotal: '0',
       externalPaymentTotal: '0',
       updatedAt: '',
     });

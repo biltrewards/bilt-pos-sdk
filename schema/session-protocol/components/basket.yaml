@@ -132,9 +132,9 @@ Basket:
   description: |
     An immutable snapshot of the session's basket. The payment breakdown totals
     (`rebateTotal`, `pointDiscountTotal`, `storedValueTotal`, `cardPaymentTotal`,
-    `externalPaymentTotal`) are zero while the cart is being built and populated on the
+    `biltRewardsTotal`, `externalPaymentTotal`) are zero while the cart is being built and populated on the
     snapshots produced during and after settlement.
-  required: [cartId, saleTransactionId, items, taxTotal, originalTotal, discountTotal, subtotal, grandTotal, rebateTotal, pointDiscountTotal, storedValueTotal, cardPaymentTotal, externalPaymentTotal, updatedAt]
+  required: [cartId, saleTransactionId, items, taxTotal, originalTotal, discountTotal, subtotal, grandTotal, rebateTotal, pointDiscountTotal, storedValueTotal, cardPaymentTotal, biltRewardsTotal, externalPaymentTotal, updatedAt]
   properties:
     cartId:
       type: string
@@ -164,6 +164,10 @@ Basket:
     storedValueTotal:
       $ref: './common.yaml#/Money'
     cardPaymentTotal:
+      description: Amount charged to payment cards; Bilt rewards spent inside a card payment are `biltRewardsTotal`.
+      $ref: './common.yaml#/Money'
+    biltRewardsTotal:
+      description: Value of the Bilt rewards the terminal spent inside the payments (implicit loyalty); explicitly redeemed points are `pointDiscountTotal`.
       $ref: './common.yaml#/Money'
     externalPaymentTotal:
       $ref: './common.yaml#/Money'

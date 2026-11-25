@@ -4,6 +4,7 @@ import com.bilt.pos.emulator.store.LegType
 import com.bilt.pos.emulator.store.toSaleRecord
 import com.bilt.pos.session.basket.Basket
 import com.bilt.pos.session.basket.BasketLineItem
+import com.bilt.pos.session.payment.BiltRewardsPaymentResult
 import com.bilt.pos.session.payment.CardPaymentResult
 import com.bilt.pos.session.settlement.SettlementMovement
 import com.bilt.pos.session.settlement.SettlementResult
@@ -14,6 +15,7 @@ import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class SaleRecordMapperTest {
 
@@ -290,5 +292,81 @@ class SaleRecordMapperTest {
         assertEquals("411111******1111", cards[0].maskedPan)
         assertEquals(listOf(true, false), cards.map { it.partial })
         assertEquals(listOf("Visa", "Mastercard"), cards.map { it.brand })
+    }
+
+    @Test
+    fun mapsARewardsPaymentToItsOwnLegAheadOfTheCardsAndKeepsAMixedCardsRewardsPart() {
+        val result =
+            SettlementResult.builder()
+                .success(true)
+                .authorizedAmount(BigDecimal("30.00"))
+                .cardAmountCharged(BigDecimal("19.91"))
+                .biltRewardsAmount(BigDecimal("10.09"))
+                .poiTransactionId("poi-c1")
+                .addBiltRewardsPayment(
+                    BiltRewardsPaymentResult.builder()
+                        .amount(BigDecimal("7.16"))
+                        .poiTransactionId("poi-r1")
+                        .poiTransactionTimestamp(cardTime)
+                        .build()
+                )
+                .cardPayments(
+                    listOf(
+                        CardPaymentResult.builder()
+                            .amount(BigDecimal("22.84"))
+                            .biltRewardsAmount(BigDecimal("2.93"))
+                            .poiTransactionId("poi-c1")
+                            .paymentBrand("Visa")
+                            .build(),
+                        CardPaymentResult.builder()
+                            .amount(BigDecimal("0.00"))
+                            .poiTransactionId("poi-c2")
+                            .build(),
+                    )
+                )
+                .build()
+
+        val legs = record(result).legs
+
+        assertEquals(
+            listOf(LegType.BILT_REWARDS, LegType.CARD, LegType.CARD),
+            legs.map { it.type },
+        )
+        val rewards = legs[0]
+        assertEquals("poi-r1", rewards.poiTransactionId)
+        assertEquals("7.16", rewards.amount)
+        assertEquals(cardTime.toString(), rewards.poiTimestamp)
+        assertNull(rewards.brand)
+        assertNull(rewards.maskedPan)
+        // the rewards part stays on its card leg, so a later void presents it back
+        assertEquals(listOf("2.93", null), legs.drop(1).map { it.biltRewardsAmount })
+    }
+
+    @Test
+    fun aRewardsOnlySaleHasNoCardLegEvenThoughTheResultReportsTheRewardsReferenceAsItsPayment() {
+        // a sale without a card payment reports its first rewards payment in the single-payment
+        // getters: mapping that copy as a CARD leg would record the payment as a card too
+        val result =
+            SettlementResult.builder()
+                .success(true)
+                .authorizedAmount(BigDecimal("17.89"))
+                .biltRewardsAmount(BigDecimal("17.89"))
+                .poiTransactionId("poi-r1")
+                .poiTransactionTimestamp(cardTime)
+                .addBiltRewardsPayment(
+                    BiltRewardsPaymentResult.builder()
+                        .amount(BigDecimal("17.89"))
+                        .poiTransactionId("poi-r1")
+                        .poiTransactionTimestamp(cardTime)
+                        .build()
+                )
+                .build()
+
+        val legs = record(result).legs
+
+        assertEquals(listOf(LegType.BILT_REWARDS), legs.map { it.type })
+        assertEquals("17.89", legs.single().amount)
+        assertTrue(record(result).cardLegs.isEmpty())
+        assertEquals(listOf("poi-r1"), record(result).biltRewardsLegs.map { it.poiTransactionId })
     }
 }

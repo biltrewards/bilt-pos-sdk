@@ -20,11 +20,13 @@ public final class CardPaymentRecord {
   private final String poiTransactionId;
   private final Instant poiTransactionTimestamp;
   private final BigDecimal amount;
+  private final BigDecimal biltRewardsAmount;
 
   private CardPaymentRecord(Builder builder) {
     this.poiTransactionId = Objects.requireNonNull(builder.poiTransactionId, "poiTransactionId");
     this.poiTransactionTimestamp = builder.poiTransactionTimestamp;
     this.amount = builder.amount;
+    this.biltRewardsAmount = builder.biltRewardsAmount;
   }
 
   public static Builder builder() {
@@ -38,6 +40,8 @@ public final class CardPaymentRecord {
         .poiTransactionId(payment.getPoiTransactionId())
         .poiTransactionTimestamp(payment.getPoiTransactionTimestamp())
         .amount(payment.getAmount())
+        .biltRewardsAmount(
+            payment.getBiltRewardsAmount().signum() > 0 ? payment.getBiltRewardsAmount() : null)
         .build();
   }
 
@@ -57,6 +61,15 @@ public final class CardPaymentRecord {
     return amount;
   }
 
+  /**
+   * The part of {@link #getAmount()} Bilt rewards paid ({@link
+   * CardPaymentResult#getBiltRewardsAmount()}), or {@code null} when the card paid it all or it was
+   * not recorded. A void or full refund reports this part under the Bilt rewards tender.
+   */
+  public BigDecimal getBiltRewardsAmount() {
+    return biltRewardsAmount;
+  }
+
   @Override
   public boolean equals(Object other) {
     if (this == other) {
@@ -70,7 +83,11 @@ public final class CardPaymentRecord {
         && Objects.equals(poiTransactionTimestamp, that.poiTransactionTimestamp)
         && (amount == null
             ? that.amount == null
-            : that.amount != null && amount.compareTo(that.amount) == 0);
+            : that.amount != null && amount.compareTo(that.amount) == 0)
+        && (biltRewardsAmount == null
+            ? that.biltRewardsAmount == null
+            : that.biltRewardsAmount != null
+                && biltRewardsAmount.compareTo(that.biltRewardsAmount) == 0);
   }
 
   @Override
@@ -78,13 +95,15 @@ public final class CardPaymentRecord {
     return Objects.hash(
         poiTransactionId,
         poiTransactionTimestamp,
-        amount == null ? null : amount.stripTrailingZeros());
+        amount == null ? null : amount.stripTrailingZeros(),
+        biltRewardsAmount == null ? null : biltRewardsAmount.stripTrailingZeros());
   }
 
   public static final class Builder {
     private String poiTransactionId;
     private Instant poiTransactionTimestamp;
     private BigDecimal amount;
+    private BigDecimal biltRewardsAmount;
 
     private Builder() {}
 
@@ -100,6 +119,11 @@ public final class CardPaymentRecord {
 
     public Builder amount(BigDecimal amount) {
       this.amount = amount;
+      return this;
+    }
+
+    public Builder biltRewardsAmount(BigDecimal biltRewardsAmount) {
+      this.biltRewardsAmount = biltRewardsAmount;
       return this;
     }
 

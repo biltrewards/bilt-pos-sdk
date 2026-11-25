@@ -565,7 +565,7 @@ class NexoEmulatorControllerSplitPaymentTest {
             controller.addReturnToBasket(
                 "sale-split",
                 setOf("SKU-1"),
-                cardPoiTransactionId = "poi-c2",
+                tenderPoiTransactionId = "poi-c2",
             )
             withTimeout(10_000) { controller.state.first { s -> s.basket.any { it.credit } } }
             withTimeout(10_000) { controller.state.first { !it.refundInProgress } }
@@ -609,10 +609,12 @@ class NexoEmulatorControllerSplitPaymentTest {
             controller.addReturnToBasket(
                 "sale-split",
                 setOf("SKU-1"),
-                cardPoiTransactionId = "nope",
+                tenderPoiTransactionId = "nope",
             )
             withTimeout(10_000) {
-                controller.state.first { s -> s.events.any { "chosen card payment (nope)" in it } }
+                controller.state.first { s ->
+                    s.events.any { "chosen card or Bilt Rewards payment (nope)" in it }
+                }
             }
             assertTrue(controller.state.value.basket.isEmpty())
         }
@@ -632,7 +634,7 @@ class NexoEmulatorControllerSplitPaymentTest {
             controller.addReturnToBasket(
                 "sale-split",
                 setOf("SKU-1"),
-                cardPoiTransactionId = "poi-c1",
+                tenderPoiTransactionId = "poi-c1",
             )
             withTimeout(10_000) {
                 controller.state.first { s -> s.basket.count { it.credit } == 1 }
@@ -641,7 +643,7 @@ class NexoEmulatorControllerSplitPaymentTest {
             controller.addReturnToBasket(
                 "sale-split",
                 setOf("SKU-2"),
-                cardPoiTransactionId = "poi-c2",
+                tenderPoiTransactionId = "poi-c2",
             )
             withTimeout(10_000) {
                 controller.state.first { s -> s.basket.count { it.credit } == 2 }

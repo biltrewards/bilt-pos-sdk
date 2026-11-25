@@ -3,6 +3,7 @@ import { useController, useEmulatorState } from '../emulator/context';
 import {
   RECOVERY_ACTIONS,
   partialApprovalChoice,
+  partialApprovalHeadline,
   type PartialApprovalPrompt,
   type PaymentRecoveryPrompt,
 } from '../emulator/state';
@@ -28,15 +29,13 @@ function PaymentRecoveryDialog({ prompt }: { prompt: PaymentRecoveryPrompt }): R
 }
 
 /**
- * A card approved less than it was asked for and the host waits for the cashier: not
+ * A card (or the Bilt Rewards leg) approved less than it was asked for and the host waits for the cashier: not
  * dismissible, one button per choice, each with a one-line description.
  */
 function PartialApprovalDialog({ prompt }: { prompt: PartialApprovalPrompt }): ReactNode {
   return (
     <Dialog title="Partial approval" titleClass="error">
-      <p>
-        Card approved ${prompt.approved} of ${prompt.requested}, ${prompt.amountDue} still due
-      </p>
+      <p>{partialApprovalHeadline(prompt)}</p>
       <p>Choose how to collect the rest:</p>
       {prompt.actions.map((action) => {
         const choice = partialApprovalChoice(action, prompt);

@@ -3,6 +3,7 @@ import type { LegType, RefundRecord, StoredSale } from './sale-record';
 
 const LEG_OF_STEP: Partial<Record<ReversalStep, LegType>> = {
   CARD: 'CARD',
+  BILT_REWARDS: 'BILT_REWARDS',
   STORED_VALUE: 'STORED_VALUE',
   AWARD: 'AWARD',
   REBATE: 'REBATE',
@@ -50,11 +51,15 @@ export function reversalProgress(
 
 /**
  * The Java default policy for a failed reversal step, so the prompt can offer it as the
- * default: a failed tender reversal aborts, a loyalty movement riding along is skipped (the
+ * default: a failed tender reversal (a Bilt rewards payment included) aborts, a loyalty movement riding along is skipped (the
  * terminal can retry it through store-and-forward).
  */
 export function defaultReversalDecision(step: ReversalStep | null): ReversalDecision {
-  return step === 'STORED_VALUE_LOAD' || step === 'CARD' || step === 'STORED_VALUE' || step === null
+  return step === 'STORED_VALUE_LOAD' ||
+    step === 'CARD' ||
+    step === 'BILT_REWARDS' ||
+    step === 'STORED_VALUE' ||
+    step === null
     ? 'ABORT'
     : 'SKIP';
 }

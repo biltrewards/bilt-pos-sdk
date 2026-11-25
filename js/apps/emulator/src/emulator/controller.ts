@@ -20,6 +20,7 @@ import {
   type ShopperSession,
   type StepInfo,
   type StoredValueCard,
+  type TenderAmount,
   type TenderMovement,
   type TerminalShopperSession,
 } from '@biltorg/pos-sdk';
@@ -54,6 +55,7 @@ import {
   RECOVERY_ACTIONS,
   memberHeadline,
   type BasketLine,
+  biltRewardsLine,
   cardLine,
   type CardOptions,
   type EmulatorController,
@@ -72,6 +74,7 @@ import {
   type StoredValueOptions,
   partialApprovalActions,
   partialApprovalChoice,
+  partialApprovalHeadline,
 } from './state';
 
 /** What the controller needs to know about the lane; the Settings fields of the connection card. */
@@ -130,10 +133,51 @@ function movementKey(movement: SettlementMovement): string {
   return movement.poiTransactionId ?? movement.serviceId ?? `${movement.step}:${movement.amount}`;
 }
 
+/**
+ * Whether a `CARD_CHARGE` or `CARD_REFUND` movement is a payment Bilt rewards paid in full: the
+ * terminal's rewards leg keeps the card steps, with the rewards part equal to the amount.
+ */
+function isBiltRewardsMovement(movement: SettlementMovement): boolean {
+  return (
+    cents(movement.biltRewardsAmount) > 0 &&
+    cents(movement.biltRewardsAmount) === cents(movement.amount)
+  );
+}
+
 /** `card payment $60.00 (txn POI-C1)`, one standing charge. */
 function standingLine(movement: SettlementMovement): string {
   const txn = movement.poiTransactionId ?? movement.serviceId;
-  return `${STANDING_LABELS[movement.step] ?? movement.step} $${movement.amount} (txn ${txn ?? '?'})`;
+  const rewards = cents(movement.biltRewardsAmount) > 0;
+  const label = isBiltRewardsMovement(movement)
+    ? 'Bilt Rewards payment'
+    : (STANDING_LABELS[movement.step] ?? movement.step);
+  const included =
+    rewards && !isBiltRewardsMovement(movement)
+      ? ` (incl. Bilt Rewards $${movement.biltRewardsAmount})`
+      : '';
+  return `${label} $${movement.amount}${included} (txn ${txn ?? '?'})`;
+}
+
+const TENDER_LABELS: Readonly<Record<TenderAmount['tender'], string>> = {
+  CARD: 'Card',
+  BILT_REWARDS: 'Bilt Rewards',
+  STORED_VALUE: 'Gift card',
+  EXTERNAL: 'Cash',
+};
+
+/**
+ * `Returned by tender: Card $9.91, Bilt Rewards $3.30` for a void that returned Bilt rewards, so
+ * a card payment rewards paid part of shows its two shares; `undefined` when it returned none.
+ */
+function tenderLine(entries: readonly TenderAmount[]): string | undefined {
+  if (!entries.some((entry) => entry.tender === 'BILT_REWARDS')) return undefined;
+  const totals = new Map<TenderAmount['tender'], number>();
+  for (const entry of entries) {
+    totals.set(entry.tender, (totals.get(entry.tender) ?? 0) + cents(entry.amount));
+  }
+  return `Returned by tender: ${[...totals]
+    .map(([tender, minor]) => `${TENDER_LABELS[tender]} $${formatMinor(minor)}`)
+    .join(', ')}`;
 }
 
 function bullets(lines: readonly string[]): string {
@@ -1296,7 +1340,11 @@ export class BrowserEmulatorController implements EmulatorController {
           {
             onCardRefunded: (movement) =>
               this.log(
-                `Card refund committed: $${movement.amount} (txn ${movement.poiTransactionId})`,
+                `${isBiltRewardsMovement(movement) ? 'Bilt Rewards' : 'Card'} refund committed: $${movement.amount}${
+                  cents(movement.biltRewardsAmount) > 0 && !isBiltRewardsMovement(movement)
+                    ? ` (incl. Bilt Rewards $${movement.biltRewardsAmount})`
+                    : ''
+                } (txn ${movement.poiTransactionId})`,
               ),
             onGiftCardRefunded: (movement) =>
               this.log(
@@ -1324,9 +1372,16 @@ export class BrowserEmulatorController implements EmulatorController {
             },
             onStoredValueLoaded: (movement) =>
               this.log(`Gift card loaded: $${movement.amount} (txn ${movement.poiTransactionId})`),
+            // a Bilt rewards payment is not a card: it keeps the card steps but no card number
             onCardCharged: (movement) =>
               this.log(
-                `Card payment ${++cardPayments} charged: $${movement.amount} (txn ${movement.poiTransactionId})`,
+                isBiltRewardsMovement(movement)
+                  ? `Bilt Rewards payment charged: $${movement.amount} (txn ${movement.poiTransactionId})`
+                  : `Card payment ${++cardPayments} charged: $${movement.amount}${
+                      cents(movement.biltRewardsAmount) > 0
+                        ? ` (incl. Bilt Rewards $${movement.biltRewardsAmount})`
+                        : ''
+                    } (txn ${movement.poiTransactionId})`,
               ),
             // a card payment the SDK reversed (before a retry, or in an abort) is no longer one
             onMovement: (movement) => {
@@ -1338,9 +1393,10 @@ export class BrowserEmulatorController implements EmulatorController {
               }
             },
             onCardChargeReversed: (movement) => {
-              cardPayments = Math.max(0, cardPayments - 1);
+              const rewards = isBiltRewardsMovement(movement);
+              if (!rewards) cardPayments = Math.max(0, cardPayments - 1);
               this.log(
-                `Card payment reversed: $${movement.amount} (reversal txn ${movement.poiTransactionId ?? movement.serviceId ?? '?'}, reverses txn ${movement.reversedMovement?.poiTransactionId ?? '?'})`,
+                `${rewards ? 'Bilt Rewards payment' : 'Card payment'} reversed: $${movement.amount} (reversal txn ${movement.poiTransactionId ?? movement.serviceId ?? '?'}, reverses txn ${movement.reversedMovement?.poiTransactionId ?? '?'})`,
               );
             },
             // Registered only with the toggle on: without a handler the SDK charges the
@@ -1558,8 +1614,15 @@ export class BrowserEmulatorController implements EmulatorController {
     partial: PartialCardApproval,
     signal: AbortSignal,
   ): Promise<PartialApprovalDecision> {
+    // The terminal's points leg answers as a partial approval with no card in it.
+    const biltRewardsPaid = partial.biltRewardsPayment?.amount ?? null;
+    const biltRewardsIncluded =
+      biltRewardsPaid === null && cents(partial.biltRewardsAmount) > 0
+        ? partial.biltRewardsAmount
+        : null;
+    const rewards = { biltRewardsPaid, biltRewardsIncluded };
     this.log(
-      `Partial approval: card approved $${partial.approved} of $${partial.requested}, $${partial.amountDue} still due`,
+      `Partial approval: ${partialApprovalHeadline({ ...partial, ...rewards }).replace(/^Card /, 'card ')}`,
     );
     if (generation !== this.generation) return Promise.resolve({ action: 'ABORT' });
     // amountDue is the shortfall plus every card payment still to come
@@ -1573,7 +1636,7 @@ export class BrowserEmulatorController implements EmulatorController {
         this.update({ partialApproval: null });
         if (action === 'ABORT') this.saleCancelled = true;
         this.log(
-          `Cashier chose ${partialApprovalChoice(action, partial).label} for the partial approval`,
+          `Cashier chose ${partialApprovalChoice(action, { ...partial, ...rewards }).label} for the partial approval`,
         );
         resolve(
           action === 'EXTERNAL'
@@ -1597,6 +1660,7 @@ export class BrowserEmulatorController implements EmulatorController {
           requested: partial.requested,
           shortfall: partial.shortfall,
           amountDue: partial.amountDue,
+          ...rewards,
           plannedLeft,
           actions,
           choose,
@@ -1655,6 +1719,7 @@ export class BrowserEmulatorController implements EmulatorController {
     this.publishBasket(result.finalBasket);
     const positive = (value: Money) => cents(value) > 0;
     const cardUi = (result.cardPayments ?? []).map(toCardPaymentUi);
+    const rewardsPayments = result.biltRewardsPayments ?? [];
     const split = cardUi.length > 1;
     // A split sale lists one line per card payment; a single payment keeps the short form. An
     // older host reports only the single-payment fields.
@@ -1664,17 +1729,37 @@ export class BrowserEmulatorController implements EmulatorController {
       : positive(result.cardAmountCharged)
         ? [`card $${result.cardAmountCharged}${brand}`]
         : [];
+    // card money only: `cardAmountCharged` and each payment's `cardAmount` leave the rewards out
     const cardSummary = split
-      ? `${cardUi.length} cards ${cardUi.map((card) => `$${card.amount}`).join(' + ')}`
+      ? `${cardUi.length} cards ${(result.cardPayments ?? []).map((payment) => `$${payment.cardAmount}`).join(' + ')}`
       : positive(result.cardAmountCharged)
         ? `card $${result.cardAmountCharged}${brand}`
         : null;
-    const otherParts = (card: readonly (string | null)[]) =>
+    // Bilt rewards, shown beside the card: each rewards-only payment on its own line, and the
+    // rewards part of a single card payment (a split sale's card lines carry theirs)
+    const insideCards = (result.cardPayments ?? []).reduce(
+      (sum, payment) => sum + cents(payment.biltRewardsAmount),
+      0,
+    );
+    const rewardsLines = [
+      ...rewardsPayments.map((payment) => biltRewardsLine(payment)),
+      ...(insideCards > 0 && !split
+        ? [`${biltRewardsLine({ amount: money(insideCards) })} (in the card payment)`]
+        : []),
+    ];
+    const rewardsSummary = positive(result.biltRewardsAmount)
+      ? biltRewardsLine({ amount: result.biltRewardsAmount })
+      : null;
+    const otherParts = (
+      rewardsPart: readonly (string | null)[],
+      card: readonly (string | null)[],
+    ) =>
       [
         ...returnParts,
         positive(result.externalPaymentAmount)
           ? `cash $${result.externalPaymentAmount} (register-managed; refund manually)`
           : null,
+        ...rewardsPart,
         ...card,
         positive(result.storedValueAmountUsed)
           ? `gift card $${result.storedValueAmountUsed}`
@@ -1690,12 +1775,12 @@ export class BrowserEmulatorController implements EmulatorController {
           ? `earned ${result.totalPointsEarned} pts (balance ${result.pointsBalance})`
           : null,
       ].filter((part): part is string => part !== null);
-    const parts = otherParts([cardSummary]);
+    const parts = otherParts([rewardsSummary], [cardSummary]);
     const authorized = money(cents(result.authorizedAmount));
     const summary = `Settled $${authorized}${parts.length ? ` — ${parts.join(', ')}` : ''}`;
     const popup = [
       `Settled $${authorized}`,
-      ...otherParts(cardLines),
+      ...otherParts(rewardsLines, cardLines),
       ...result.promotionMessages,
       ...result.warnings.map((warning) => `Warning: ${warning}`),
     ].join('\n');
@@ -1718,7 +1803,10 @@ export class BrowserEmulatorController implements EmulatorController {
       },
     });
     this.log(summary);
-    if (split) cardLines.forEach((line) => this.log(line));
+    if (split) {
+      rewardsLines.forEach((line) => this.log(line));
+      cardLines.forEach((line) => this.log(line));
+    }
     result.promotionMessages.forEach((message) => this.log(`Promo: ${message}`));
     result.warnings.forEach((warning) => this.log(`Warning: ${warning}`));
   }
@@ -1755,7 +1843,7 @@ export class BrowserEmulatorController implements EmulatorController {
   addReturnToBasket(
     saleId: string,
     skus: ReadonlySet<string>,
-    cardPoiTransactionId?: string,
+    tenderPoiTransactionId?: string,
   ): void {
     const session = this.checkout();
     if (!session || !this.claim()) return;
@@ -1773,7 +1861,7 @@ export class BrowserEmulatorController implements EmulatorController {
           stored,
           skus,
           (sku) => this.pendingQuantity(saleId, sku),
-          cardPoiTransactionId,
+          tenderPoiTransactionId,
         );
         if ('error' in plan) {
           this.log(plan.error);
@@ -1795,12 +1883,14 @@ export class BrowserEmulatorController implements EmulatorController {
         this.log(
           `Return rung in: ${plan.pending.items
             .map((item) => `${item.quantity}× ${item.description}`)
-            .join(', ')} — restores to the ${
+            .join(', ')} — restores to ${
             plan.pending.leg.type === 'STORED_VALUE'
-              ? 'gift card'
-              : plan.cardCount > 1
-                ? `card ${plan.cardNumber}`
-                : 'card'
+              ? 'the gift card'
+              : plan.pending.leg.type === 'BILT_REWARDS'
+                ? 'Bilt Rewards'
+                : plan.cardCount > 1
+                  ? `the card ${plan.cardNumber}`
+                  : 'the card'
           } on settlement`,
         );
       })
@@ -1919,29 +2009,38 @@ export class BrowserEmulatorController implements EmulatorController {
         ].filter((part): part is string => part !== null);
         // Several tender legs (card payments, a gift card): one line and one receipt per leg;
         // a single leg keeps the result's own receipt.
-        const legs = [...(result.cardReversals ?? [])];
+        const legs = [...(result.cardReversals ?? []), ...(result.biltRewardsReversals ?? [])];
         if (result.storedValueReversal) legs.push(result.storedValueReversal);
         const several = legs.length > 1;
         const cardIds = cardLegs(sale).map((leg) => leg.poiTransactionId);
         const labelOf = (leg: TenderMovement): string =>
           leg.tenderType === 'STORED_VALUE'
             ? 'Gift card'
-            : cardIds.length > 1 && leg.originalPoiTransactionId !== undefined
-              ? `Card ${cardIds.indexOf(leg.originalPoiTransactionId) + 1}`
-              : 'Card';
+            : leg.tenderType === 'BILT_REWARDS'
+              ? 'Bilt Rewards'
+              : cardIds.length > 1 && leg.originalPoiTransactionId !== undefined
+                ? `Card ${cardIds.indexOf(leg.originalPoiTransactionId) + 1}`
+                : 'Card';
+        // a card payment Bilt rewards paid part of says how much of its reversal went back to them
+        const includedOf = (leg: TenderMovement): string =>
+          leg.tenderType === 'CARD' && cents(leg.biltRewardsAmount) > 0
+            ? ` (incl. Bilt Rewards $${leg.biltRewardsAmount})`
+            : '';
         const legLines = several
           ? legs.map(
               (leg) =>
-                `${labelOf(leg)} reversed${leg.amount === undefined ? '' : ` $${leg.amount}`} (txn ${
+                `${labelOf(leg)} reversed${leg.amount === undefined ? '' : ` $${leg.amount}`}${includedOf(leg)} (txn ${
                   leg.poiTransactionId ?? leg.serviceId ?? '?'
                 })`,
             )
           : [];
-        const logged = [parts[0], ...legLines, ...parts.slice(1)].filter(
+        const byTender = tenderLine(result.reversedAmountByTender ?? []);
+        const logged = [parts[0], ...legLines, byTender, ...parts.slice(1)].filter(
           (part): part is string => part !== undefined,
         );
         this.log(parts.join(', '));
         legLines.forEach((line) => this.log(line));
+        if (byTender !== undefined) this.log(byTender);
         if (generation === this.generation) {
           const receipts: OutcomeReceipt[] = several
             ? legs.flatMap((leg) => {

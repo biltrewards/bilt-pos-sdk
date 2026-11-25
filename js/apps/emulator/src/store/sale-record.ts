@@ -7,7 +7,7 @@ import { cents, money } from '../money';
  * value leg, and the loyalty steps each carry their own POI transaction reference), and a later
  * referenced refund or void of a movement must present that reference.
  */
-export type LegType = 'CARD' | 'STORED_VALUE' | 'AWARD' | 'REBATE' | 'REDEMPTION';
+export type LegType = 'CARD' | 'BILT_REWARDS' | 'STORED_VALUE' | 'AWARD' | 'REBATE' | 'REDEMPTION';
 
 export interface TransactionLeg {
   readonly type: LegType;
@@ -21,6 +21,11 @@ export interface TransactionLeg {
   readonly lastDigits?: string;
   /** True for a card leg the terminal approved for less than it was asked. */
   readonly partial?: boolean;
+  /**
+   * On a card leg, the part of `amount` the terminal paid with Bilt rewards; absent when the card
+   * paid it all. A `BILT_REWARDS` leg is a payment the rewards paid in full, with no card in it.
+   */
+  readonly biltRewardsAmount?: Money;
 }
 
 export interface SaleItem {
@@ -121,7 +126,9 @@ export interface StoredSale {
 }
 
 export function moneyLegs(sale: SaleRecord): readonly TransactionLeg[] {
-  return sale.legs.filter((leg) => leg.type === 'CARD' || leg.type === 'STORED_VALUE');
+  return sale.legs.filter(
+    (leg) => leg.type === 'CARD' || leg.type === 'BILT_REWARDS' || leg.type === 'STORED_VALUE',
+  );
 }
 
 export function legOf(sale: SaleRecord, type: LegType): TransactionLeg | undefined {
@@ -131,6 +138,11 @@ export function legOf(sale: SaleRecord, type: LegType): TransactionLeg | undefin
 /** Every card payment of a sale, in the order the terminal charged them. */
 export function cardLegs(sale: SaleRecord): readonly TransactionLeg[] {
   return sale.legs.filter((leg) => leg.type === 'CARD');
+}
+
+/** Every payment of a sale the terminal paid entirely with Bilt rewards: never a card. */
+export function biltRewardsLegs(sale: SaleRecord): readonly TransactionLeg[] {
+  return sale.legs.filter((leg) => leg.type === 'BILT_REWARDS');
 }
 
 /** Whether a record's leg is this one: by POI reference when it names one, else by type. */
@@ -250,6 +262,12 @@ export function toSaleRecord(result: SettlementResult, context: SaleContext): Sa
     result.poiTransactionId !== undefined &&
     result.poiTransactionId === result.storedValuePoiTransactionId;
   const cardPayments = result.cardPayments ?? [];
+  const biltRewardsPayments = result.biltRewardsPayments ?? [];
+  // With no card payment the single-payment fields stand for the first Bilt rewards payment: a
+  // rewards-only sale has no card leg either.
+  const rewardsIsPrimary =
+    result.poiTransactionId !== undefined &&
+    biltRewardsPayments.some((payment) => payment.poiTransactionId === result.poiTransactionId);
   const legs: TransactionLeg[] = [
     ...(cardPayments.length > 0
       ? cardPayments.flatMap((payment) =>
@@ -263,9 +281,12 @@ export function toSaleRecord(result: SettlementResult, context: SaleContext): Sa
               ? {}
               : { lastDigits: lastDigits(payment.maskedPan)! }),
             ...(payment.partialApproval ? { partial: true } : {}),
+            ...(cents(payment.biltRewardsAmount) > 0
+              ? { biltRewardsAmount: payment.biltRewardsAmount }
+              : {}),
           }),
         )
-      : storedValueIsPrimary
+      : storedValueIsPrimary || rewardsIsPrimary
         ? []
         : leg(
             'CARD',
@@ -280,6 +301,14 @@ export function toSaleRecord(result: SettlementResult, context: SaleContext): Sa
               ...(result.paymentBrand === undefined ? {} : { brand: result.paymentBrand }),
             },
           )),
+    ...biltRewardsPayments.flatMap((payment) =>
+      leg(
+        'BILT_REWARDS',
+        payment.poiTransactionId,
+        payment.poiTransactionTimestamp,
+        payment.amount,
+      ),
+    ),
     ...leg(
       'STORED_VALUE',
       result.storedValuePoiTransactionId,
@@ -363,16 +392,30 @@ export function originalSaleRecord(stored: StoredSale): OriginalSaleRecord {
   } = {};
   const cards = cardLegs(sale).filter((card) => !legRefunded(stored, card));
   const [firstCard] = cards;
-  if (cards.length > 1) {
-    // Several card payments: the list names each, and takes precedence over the single-card fields.
+  if (cards.length > 1 || (firstCard !== undefined && firstCard.biltRewardsAmount !== undefined)) {
+    // Several card payments, or one that Bilt rewards paid part of (only the list carries the
+    // rewards part): the list names each, and takes precedence over the single-card fields.
     record.cardPayments = cards.map((card) => ({
       poiTransactionId: card.poiTransactionId,
       ...(card.poiTimestamp === undefined ? {} : { poiTransactionTimestamp: card.poiTimestamp }),
       ...(card.amount === undefined ? {} : { amount: card.amount }),
+      ...(card.biltRewardsAmount === undefined
+        ? {}
+        : { biltRewardsAmount: card.biltRewardsAmount }),
     }));
   } else if (firstCard) {
     record.cardPoiTransactionId = firstCard.poiTransactionId;
     if (firstCard.poiTimestamp) record.cardPoiTransactionTimestamp = firstCard.poiTimestamp;
+  }
+  const rewards = biltRewardsLegs(sale).filter((payment) => !legRefunded(stored, payment));
+  if (rewards.length > 0) {
+    record.biltRewardsPayments = rewards.map((payment) => ({
+      poiTransactionId: payment.poiTransactionId,
+      ...(payment.poiTimestamp === undefined
+        ? {}
+        : { poiTransactionTimestamp: payment.poiTimestamp }),
+      ...(payment.amount === undefined ? {} : { amount: payment.amount }),
+    }));
   }
   const storedValue = legOf(sale, 'STORED_VALUE');
   if (storedValue && !legRefunded(stored, storedValue)) {

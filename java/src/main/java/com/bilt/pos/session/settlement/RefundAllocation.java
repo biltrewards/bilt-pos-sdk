@@ -58,8 +58,10 @@ public final class RefundAllocation {
 
   /**
    * Linked card refund against a persisted original sale record. The record must contain exactly
-   * one card payment: with several, the refund cannot tell which one to return to, so pick one of
-   * {@link OriginalSaleRecord#getCardPayments()} and use {@link #card(BigDecimal, String,
+   * one card payment (its Bilt rewards payments are not card payments, so they do not count, and a
+   * sale paid only with rewards has no card leg: use {@link #biltRewards(BigDecimal,
+   * OriginalSaleRecord)}): with several, the refund cannot tell which one to return to, so pick one
+   * of {@link OriginalSaleRecord#getCardPayments()} and use {@link #card(BigDecimal, String,
    * Instant)}, one allocation per card payment. Use {@link #cardUnlinked(BigDecimal)} when the
    * refund should be issued against a card presented at the terminal.
    *
@@ -81,6 +83,53 @@ public final class RefundAllocation {
             originalSale.getCardPoiTransactionId(),
             "originalSale has no card leg; use cardUnlinked() " + "for an unlinked refund"),
         originalSale.getCardPoiTransactionTimestamp());
+  }
+
+  /**
+   * Linked refund of a Bilt rewards payment of the original sale ({@link
+   * OriginalSaleRecord#getBiltRewardsPayments()}): the terminal returns {@code amount} to the
+   * member's rewards. It is the same Nexo PaymentRequest(Refund) as a linked card refund, but the
+   * settlement reports it as rewards ({@code SettlementResult.getBiltRewardsRefundedAmount()}), not
+   * as card money.
+   */
+  public static RefundAllocation biltRewards(
+      BigDecimal amount, String originalPoiTransactionId, Instant originalPoiTransactionTimestamp) {
+    return builder()
+        .type(RefundAllocationType.BILT_REWARDS)
+        .amount(amount)
+        .originalPoiTransactionId(
+            Objects.requireNonNull(originalPoiTransactionId, "originalPoiTransactionId"))
+        .originalPoiTransactionTimestamp(originalPoiTransactionTimestamp)
+        .build();
+  }
+
+  /** {@link #biltRewards(BigDecimal, String, Instant)} against one of a sale's rewards payments. */
+  public static RefundAllocation biltRewards(BigDecimal amount, BiltRewardsPaymentRecord payment) {
+    Objects.requireNonNull(payment, "payment");
+    return biltRewards(amount, payment.getPoiTransactionId(), payment.getPoiTransactionTimestamp());
+  }
+
+  /**
+   * {@link #biltRewards(BigDecimal, String, Instant)} against a persisted original sale record,
+   * which must contain exactly one Bilt rewards payment; with several, pick one of {@link
+   * OriginalSaleRecord#getBiltRewardsPayments()} and use {@link #biltRewards(BigDecimal,
+   * BiltRewardsPaymentRecord)}.
+   *
+   * @throws IllegalArgumentException if the record holds no Bilt rewards payment or several
+   */
+  public static RefundAllocation biltRewards(BigDecimal amount, OriginalSaleRecord originalSale) {
+    Objects.requireNonNull(originalSale, "originalSale");
+    int payments = originalSale.getBiltRewardsPayments().size();
+    if (payments != 1) {
+      throw new IllegalArgumentException(
+          payments == 0
+              ? "originalSale has no Bilt rewards payment"
+              : "originalSale has "
+                  + payments
+                  + " Bilt rewards payments; refund each with RefundAllocation.biltRewards("
+                  + "amount, payment) from originalSale.getBiltRewardsPayments()");
+    }
+    return biltRewards(amount, originalSale.getBiltRewardsPayments().get(0));
   }
 
   /** Unlinked card refund. */
@@ -275,7 +324,7 @@ public final class RefundAllocation {
     if (amount.signum() < 0 || (countsTowardRefundTotal() && amount.signum() == 0)) {
       throw new IllegalArgumentException(type + " refund allocation amount must be positive");
     }
-    if (type == RefundAllocationType.STORED_VALUE) {
+    if (type == RefundAllocationType.STORED_VALUE || type == RefundAllocationType.BILT_REWARDS) {
       Objects.requireNonNull(originalPoiTransactionId, "originalPoiTransactionId");
     }
     if (type == RefundAllocationType.STORE_CREDIT) {

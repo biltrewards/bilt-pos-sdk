@@ -36,24 +36,35 @@ enum class PartialApprovalAction(val label: String) {
 }
 
 /**
- * The partial approval dialog: a card approved less than it was asked for and the sale waits for
- * the cashier's decision. Amounts are plain decimal strings.
+ * The partial approval dialog: a card approved less than it was asked for — or Bilt rewards paid
+ * part of the sale, [biltRewards] — and the sale waits for the cashier's decision. Amounts are
+ * plain decimal strings.
  */
 data class PartialApprovalPrompt(
-    /** What the card approved. */
+    /** What the card (or the Bilt rewards) approved. */
     val approved: String,
-    /** What the card payment asked for. */
+    /** What the payment asked for. */
     val requested: String,
     /** What this card payment left unpaid. */
     val shortfall: String,
     /** Everything the card phase still owes: the shortfall plus the card payments still planned. */
     val amountDue: String,
     val actions: List<PartialApprovalAction>,
+    /**
+     * Bilt rewards paid [approved] — the terminal's points leg, not a card approval. The rest is
+     * collected as for a card's shortfall.
+     */
+    val biltRewards: Boolean = false,
     val choose: (PartialApprovalAction) -> Unit,
 ) {
     /** The dialog headline. */
     val message: String
-        get() = "Card approved $$approved of $$requested, $$amountDue still due"
+        get() =
+            if (biltRewards) {
+                "Bilt Rewards paid $$approved of $$requested, $$amountDue still due"
+            } else {
+                "Card approved $$approved of $$requested, $$amountDue still due"
+            }
 
     /** The one line under a button saying what choosing it does. */
     fun describe(action: PartialApprovalAction): String =
@@ -63,8 +74,13 @@ data class PartialApprovalPrompt(
             PartialApprovalAction.ADD_TO_NEXT ->
                 "Add the $$shortfall shortfall to the next planned card payment."
             PartialApprovalAction.CASH ->
-                "Record $$amountDue as cash and keep the card payments. Choose only after collecting it."
-            PartialApprovalAction.CANCEL_SALE -> "Reverse every card payment and stop the sale."
+                "Record $$amountDue as cash and keep the " +
+                    (if (biltRewards) "payments" else "card payments") +
+                    ". Choose only after collecting it."
+            PartialApprovalAction.CANCEL_SALE ->
+                if (biltRewards)
+                    "Return the Bilt Rewards and reverse every card payment, and stop the sale."
+                else "Reverse every card payment and stop the sale."
         }
 
     /** The button caption: the amount the choice puts on its tender, where it has one. */
@@ -188,6 +204,13 @@ data class CardPaymentUi(
     val approvalCode: String? = null,
     /** The card approved less than it was asked for. */
     val partial: Boolean = false,
+    /**
+     * The part of [amount] Bilt rewards paid, as a plain decimal string; null when the card paid it
+     * all. Paired with [cardAmount], what the card itself paid.
+     */
+    val biltRewardsAmount: String? = null,
+    /** What the card itself paid of [amount]; set with [biltRewardsAmount]. */
+    val cardAmount: String? = null,
     /** A full refund or void already returned this payment. */
     val refunded: Boolean = false,
     /**
@@ -201,11 +224,14 @@ data class CardPaymentUi(
     val returnable: Boolean
         get() = !refunded && !depleted
 
-    /** One line: amount, brand, last digits, approval code and the "partial" tag. */
+    /**
+     * One line: amount, brand, last digits, approval code and the "partial" tag. A card that Bilt
+     * rewards paid part of splits its amount: "Card 1 $13.21 (card $9.91 + Bilt Rewards $3.30)".
+     */
     val line: String
         get() =
             listOfNotNull(
-                    "$label $$amount",
+                    "$label $$amount" + (biltRewardsSplit?.let { " ($it)" } ?: ""),
                     listOfNotNull(brand, lastDigits?.let { "····$it" }).joinToString(" ").ifBlank {
                         null
                     },
@@ -213,6 +239,42 @@ data class CardPaymentUi(
                     "partial".takeIf { partial },
                     "refunded".takeIf { refunded || depleted },
                 )
+                .joinToString(" · ")
+
+    /**
+     * What the card paid and what Bilt rewards paid of [amount], or null when rewards paid none.
+     */
+    private val biltRewardsSplit: String?
+        get() = biltRewardsAmount?.let { rewards ->
+            (cardAmount?.let { "card $$it + " }.orEmpty()) + "Bilt Rewards $$rewards"
+        }
+}
+
+/**
+ * One payment Bilt rewards (points) paid in full, for the outcome dialog, the sales list and the
+ * Refund tab. It is never a card: it has no brand, digits or approval code, and a refund of it goes
+ * back to the member's rewards.
+ */
+data class BiltRewardsPaymentUi(
+    /** Amount of rewards spent, as a plain decimal string. */
+    val amount: String,
+    /** The POI reference a refund or void of this payment presents. */
+    val poiTransactionId: String? = null,
+    /** A full refund or void already returned this payment. */
+    val refunded: Boolean = false,
+    /** Item returns already drew everything this payment collected. */
+    val depleted: Boolean = false,
+    /** What this payment can still return, when known. */
+    val remainingAmount: String? = null,
+) {
+    /** Whether a return can still go back to this payment. */
+    val returnable: Boolean
+        get() = !refunded && !depleted
+
+    /** One line: "Bilt Rewards $17.89", with the "refunded" tag once it was returned. */
+    val line: String
+        get() =
+            listOfNotNull("Bilt Rewards $$amount", "refunded".takeIf { refunded || depleted })
                 .joinToString(" · ")
 }
 
@@ -455,6 +517,8 @@ data class StoredSaleUi(
     val externalPaymentAmount: String? = null,
     /** Every card payment of the sale, in payment order. */
     val cardPayments: List<CardPaymentUi> = emptyList(),
+    /** Every payment Bilt rewards paid in full, in payment order; none is a card payment. */
+    val biltRewardsPayments: List<BiltRewardsPaymentUi> = emptyList(),
 ) {
     /**
      * A voided or fully refunded sale cannot be refunded again (mirrors `StoredSale.refundable`).
@@ -464,6 +528,22 @@ data class StoredSaleUi(
 
     val memberLabel: String
         get() = memberId?.let { "member $it" } ?: "guest"
+
+    /**
+     * One line per tender payment of the sale — the Bilt Rewards payments, which ran first, then
+     * the cards — for the sales list. Empty for a sale paid by one plain card, which the badge
+     * covers.
+     */
+    val paymentLines: List<String>
+        get() =
+            if (
+                cardPayments.size + biltRewardsPayments.size > 1 ||
+                    cardPayments.any { it.biltRewardsAmount != null }
+            ) {
+                biltRewardsPayments.map { it.line } + cardPayments.map { it.line }
+            } else {
+                emptyList()
+            }
 
     /** One-line badge for the sales list: buyer plus what already happened to the sale. */
     val statusLabel: String
@@ -715,11 +795,12 @@ interface EmulatorController {
      * original sale's outstanding tender via a refund allocation. Rung returns are held until the
      * settlement succeeds (recorded against their sales then) or the checkout ends.
      *
-     * A sale with several card payments needs to know which one the return goes back to:
-     * [cardPoiTransactionId] names it (`CardPaymentUi.poiTransactionId`); null picks the first card
-     * payment not yet refunded.
+     * A sale with several card payments, or Bilt Rewards next to a card, needs to know which one
+     * the return goes back to: [tenderPoiTransactionId] names it (`CardPaymentUi.poiTransactionId`
+     * or `BiltRewardsPaymentUi.poiTransactionId`); null picks the first card payment not yet
+     * refunded, then a Bilt Rewards payment.
      */
-    fun addReturnToBasket(saleId: String, skus: Set<String>, cardPoiTransactionId: String? = null)
+    fun addReturnToBasket(saleId: String, skus: Set<String>, tenderPoiTransactionId: String? = null)
 
     /**
      * Discard every line in the active checkout basket, including pending gift-card fulfillments

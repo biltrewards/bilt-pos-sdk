@@ -7,6 +7,7 @@ import type {
 } from '@biltorg/pos-sdk';
 import { cents, formatMinor, money } from '../money';
 import {
+  biltRewardsLegs,
   cardLegs,
   isFullyRefunded,
   isPartiallyRefunded,
@@ -20,7 +21,7 @@ import {
   type StoredSale,
   type TransactionLeg,
 } from '../store/sale-record';
-import type { SaleCardUi, StoredSaleUi } from './state';
+import type { SaleBiltRewardsUi, SaleCardUi, StoredSaleUi } from './state';
 
 /**
  * Item-based returns and full refunds of stored sales, the desktop controller's
@@ -34,7 +35,10 @@ type RefundAllocation = NonNullable<SettlementOptions['refunds']>[number];
 /** Returns rung into the active basket from one stored sale, held until settlement. */
 export interface PendingReturn {
   readonly saleId: string;
-  /** The tender leg the returns restore to: the outstanding card leg, else the gift card. */
+  /**
+   * The tender leg the returns restore to: the outstanding card leg, else the Bilt rewards
+   * payment, else the gift card.
+   */
   readonly leg: TransactionLeg;
   /** The returned lines, quantities capped at what earlier refunds left. */
   readonly items: readonly SaleItem[];
@@ -71,7 +75,10 @@ export type ReturnPlan =
   | {
       readonly pending: PendingReturn;
       readonly notes: readonly string[];
-      /** Which card payment of the sale the return restores to (1-based), of how many it has. */
+      /**
+       * Which card payment of the sale the return restores to (1-based), of how many it has;
+       * zero when it restores to a Bilt rewards payment or the gift card.
+       */
       readonly cardNumber: number;
       readonly cardCount: number;
     }
@@ -81,14 +88,15 @@ export type ReturnPlan =
  * Plans an item return of the selected `skus` of a stored sale, as the desktop's
  * `addReturnToBasket` does: refused for a voided or refunded sale, a sale with a gift-card
  * purchase, or one without a tender leg; each line capped at what earlier refunds and returns
- * already in the basket (`pendingQuantity`) have not consumed. A sale with several card payments
- * restores to the one named by `cardPoiTransactionId`, else the first still standing.
+ * already in the basket (`pendingQuantity`) have not consumed. A sale restores to the card
+ * payment or Bilt rewards payment named by `tenderPoiTransactionId`, else the first card still
+ * standing.
  */
 export function planReturn(
   stored: StoredSale,
   skus: ReadonlySet<string>,
   pendingQuantity: (sku: string) => number,
-  cardPoiTransactionId?: string,
+  tenderPoiTransactionId?: string,
 ): ReturnPlan {
   if (stored.voided) return { error: 'The sale was voided — nothing left to refund' };
   if (isFullyRefunded(stored)) {
@@ -109,21 +117,25 @@ export function planReturn(
   }
   const outstanding = legs.filter((leg) => !legRefunded(stored, leg));
   const chosen =
-    cardPoiTransactionId === undefined
+    tenderPoiTransactionId === undefined
       ? undefined
       : outstanding.find(
           (candidate) =>
-            candidate.type === 'CARD' && candidate.poiTransactionId === cardPoiTransactionId,
+            (candidate.type === 'CARD' || candidate.type === 'BILT_REWARDS') &&
+            candidate.poiTransactionId === tenderPoiTransactionId,
         );
-  if (cardPoiTransactionId !== undefined && !chosen) {
-    return { error: 'That card payment was already refunded in full — pick another card' };
+  if (tenderPoiTransactionId !== undefined && !chosen) {
+    return { error: 'That payment was already refunded in full — pick another' };
   }
   // by default the first card still holding something: one drawn down to nothing would send
-  // the whole return to the register
+  // the whole return to the register; then a Bilt rewards payment, which is no card
+  const holdsSomething = (leg: TransactionLeg) => remainingLegAmount(stored, leg) !== '0.00';
   const outstandingCards = outstanding.filter((candidate) => candidate.type === 'CARD');
+  const outstandingRewards = outstanding.filter((candidate) => candidate.type === 'BILT_REWARDS');
   const leg =
     chosen ??
-    outstandingCards.find((card) => remainingLegAmount(stored, card) !== '0.00') ??
+    outstandingCards.find(holdsSomething) ??
+    outstandingRewards.find(holdsSomething) ??
     outstandingCards[0] ??
     outstanding[0];
   if (!leg) {
@@ -229,7 +241,10 @@ export function planAllocations(
     returns.push(planned);
     if (planned.allocatedMinor > 0) {
       allocations.push({
-        type: planned.leg.type === 'CARD' ? 'CARD' : 'STORED_VALUE',
+        type:
+          planned.leg.type === 'CARD' || planned.leg.type === 'BILT_REWARDS'
+            ? planned.leg.type
+            : 'STORED_VALUE',
         amount: money(planned.allocatedMinor),
         originalPoiTransactionId: planned.leg.poiTransactionId,
         ...(planned.leg.poiTimestamp === undefined
@@ -245,7 +260,11 @@ export function planAllocations(
 }
 
 function legLabel(leg: TransactionLeg): string {
-  return leg.type === 'STORED_VALUE' ? 'gift card' : 'card';
+  return leg.type === 'STORED_VALUE'
+    ? 'the gift card'
+    : leg.type === 'BILT_REWARDS'
+      ? 'Bilt Rewards'
+      : 'the card';
 }
 
 /**
@@ -269,14 +288,14 @@ export function settledReturns(
     const netted = planned.totalMinor - planned.allocatedMinor - planned.externalMinor;
     const total = formatMinor(planned.totalMinor);
     if (planned.allocatedMinor === planned.totalMinor) {
-      parts.push(`returned $${total} to the ${legLabel(planned.leg)}`);
+      parts.push(`returned $${total} to ${legLabel(planned.leg)}`);
     } else if (planned.totalMinor > 0 && !refunded && planned.externalMinor === 0) {
       parts.push(`netted $${total} against the purchase`);
     } else {
       const details = [
-        refunded ? `$${formatMinor(planned.allocatedMinor)} to the ${legLabel(planned.leg)}` : null,
+        refunded ? `$${formatMinor(planned.allocatedMinor)} to ${legLabel(planned.leg)}` : null,
         planned.externalMinor > 0
-          ? `$${formatMinor(planned.externalMinor)} register-paid — the ${legLabel(planned.leg)} collected less than the shelf value`
+          ? `$${formatMinor(planned.externalMinor)} register-paid — ${legLabel(planned.leg)} collected less than the shelf value`
           : null,
         netted > 0 ? `$${formatMinor(netted)} netted` : null,
       ].filter(Boolean);
@@ -377,6 +396,19 @@ export function toStoredSaleUi(
         ...(card.lastDigits === undefined ? {} : { lastDigits: card.lastDigits }),
         ...(card.approvalCode === undefined ? {} : { approvalCode: card.approvalCode }),
         partial: card.partial === true,
+        ...(card.biltRewardsAmount === undefined
+          ? {}
+          : { biltRewardsAmount: card.biltRewardsAmount }),
+        refunded,
+        remainingMinor: refunded ? 0 : remaining === undefined ? null : cents(remaining),
+      };
+    }),
+    biltRewardsPayments: biltRewardsLegs(sale).map((payment): SaleBiltRewardsUi => {
+      const refunded = legRefunded(stored, payment);
+      const remaining = remainingLegAmount(stored, payment);
+      return {
+        poiTransactionId: payment.poiTransactionId,
+        ...(payment.amount === undefined ? {} : { amount: payment.amount }),
         refunded,
         remainingMinor: refunded ? 0 : remaining === undefined ? null : cents(remaining),
       };

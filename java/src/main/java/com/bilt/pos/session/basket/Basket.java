@@ -31,8 +31,9 @@ import java.util.UUID;
  * can be held freely by register code.
  *
  * <p>The payment breakdown fields ({@code rebateTotal}, {@code pointDiscountTotal}, {@code
- * storedValueTotal}, {@code cardPaymentTotal}, {@code externalPaymentTotal}) are zero during
- * cart-building and populated on the snapshots produced during and after payment orchestration.
+ * storedValueTotal}, {@code cardPaymentTotal}, {@code biltRewardsTotal}, {@code
+ * externalPaymentTotal}) are zero during cart-building and populated on the snapshots produced
+ * during and after payment orchestration.
  */
 public final class Basket {
 
@@ -50,6 +51,7 @@ public final class Basket {
   private final BigDecimal pointDiscountTotal;
   private final BigDecimal storedValueTotal;
   private final BigDecimal cardPaymentTotal;
+  private final BigDecimal biltRewardsTotal;
   private final BigDecimal externalPaymentTotal;
   private final Instant updatedAt;
 
@@ -75,6 +77,7 @@ public final class Basket {
     this.pointDiscountTotal = builder.pointDiscountTotal;
     this.storedValueTotal = builder.storedValueTotal;
     this.cardPaymentTotal = builder.cardPaymentTotal;
+    this.biltRewardsTotal = builder.biltRewardsTotal;
     this.externalPaymentTotal = builder.externalPaymentTotal;
     this.updatedAt = builder.updatedAt;
   }
@@ -150,9 +153,20 @@ public final class Basket {
     return storedValueTotal;
   }
 
-  /** Amount charged to the payment card; populated during payment. */
+  /**
+   * Amount charged to payment cards; populated during payment. Bilt rewards the terminal spent
+   * inside a card payment are not part of it: see {@link #getBiltRewardsTotal()}.
+   */
   public BigDecimal getCardPaymentTotal() {
     return cardPaymentTotal;
+  }
+
+  /**
+   * Value of the Bilt rewards the terminal spent inside the payments (implicit loyalty); populated
+   * during payment. Explicitly redeemed points are {@link #getPointDiscountTotal()}.
+   */
+  public BigDecimal getBiltRewardsTotal() {
+    return biltRewardsTotal;
   }
 
   /** Amount collected through register-managed tenders; populated during payment. */
@@ -406,6 +420,7 @@ public final class Basket {
         .pointDiscountTotal(settledChargePortion.getPointDiscountTotal())
         .storedValueTotal(settledChargePortion.getStoredValueTotal())
         .cardPaymentTotal(settledChargePortion.getCardPaymentTotal())
+        .biltRewardsTotal(settledChargePortion.getBiltRewardsTotal())
         .externalPaymentTotal(settledChargePortion.getExternalPaymentTotal())
         .build();
   }
@@ -517,6 +532,7 @@ public final class Basket {
     private BigDecimal pointDiscountTotal = BigDecimal.ZERO;
     private BigDecimal storedValueTotal = BigDecimal.ZERO;
     private BigDecimal cardPaymentTotal = BigDecimal.ZERO;
+    private BigDecimal biltRewardsTotal = BigDecimal.ZERO;
     private BigDecimal externalPaymentTotal = BigDecimal.ZERO;
     private Instant updatedAt = Instant.now();
 
@@ -579,6 +595,11 @@ public final class Basket {
 
     public Builder cardPaymentTotal(BigDecimal cardPaymentTotal) {
       this.cardPaymentTotal = cardPaymentTotal;
+      return this;
+    }
+
+    public Builder biltRewardsTotal(BigDecimal biltRewardsTotal) {
+      this.biltRewardsTotal = biltRewardsTotal;
       return this;
     }
 

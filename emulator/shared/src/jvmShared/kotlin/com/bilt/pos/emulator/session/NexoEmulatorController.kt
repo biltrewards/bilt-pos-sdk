@@ -43,6 +43,7 @@ import com.bilt.pos.session.identity.Reward
 import com.bilt.pos.session.identity.RewardType
 import com.bilt.pos.session.identity.VasData
 import com.bilt.pos.session.payment.CardPaymentResult
+import com.bilt.pos.session.settlement.BiltRewardsPaymentRecord
 import com.bilt.pos.session.settlement.CardPayment
 import com.bilt.pos.session.settlement.CardPaymentRecord
 import com.bilt.pos.session.settlement.ExternalPayment
@@ -161,8 +162,8 @@ class NexoEmulatorController(
         val original: OriginalSaleRecord,
         val legType: LegType,
         /**
-         * The card payment a [LegType.CARD] return goes back to — a split sale has several, and the
-         * allocation must name one.
+         * The card or Bilt Rewards payment a [LegType.CARD] or [LegType.BILT_REWARDS] return goes
+         * back to — a split sale has several, and the allocation must name one.
          */
         val leg: TransactionLeg,
         /** What the log calls the tender: "card", "card 2" of a split sale, or "gift card". */
@@ -1588,16 +1589,23 @@ class NexoEmulatorController(
         returns.forEach { planned ->
             if (planned.allocated.signum() > 0) {
                 optionsBuilder.addRefund(
-                    if (planned.legType == LegType.CARD) {
+                    when (planned.legType) {
                         // by the payment's own reference: the record-based overload refuses a
                         // sale with several card payments
-                        RefundAllocation.card(
-                            planned.allocated,
-                            planned.leg.poiTransactionId,
-                            parseInstant(planned.leg.poiTimestamp),
-                        )
-                    } else {
-                        RefundAllocation.storedValue(planned.allocated, planned.original)
+                        LegType.CARD ->
+                            RefundAllocation.card(
+                                planned.allocated,
+                                planned.leg.poiTransactionId,
+                                parseInstant(planned.leg.poiTimestamp),
+                            )
+                        // the rewards go back to the member, not to a card
+                        LegType.BILT_REWARDS ->
+                            RefundAllocation.biltRewards(
+                                planned.allocated,
+                                planned.leg.poiTransactionId,
+                                parseInstant(planned.leg.poiTimestamp),
+                            )
+                        else -> RefundAllocation.storedValue(planned.allocated, planned.original)
                     }
                 )
             }
@@ -1654,21 +1662,32 @@ class NexoEmulatorController(
             }
             .onCardChargeReversed { reversal ->
                 log(
-                    "Card payment reversed: $${reversal.amount?.toPlainString()} " +
+                    "${if (reversal.reversedMovement?.isBiltRewardsOnly() == true) "Bilt Rewards payment" else "Card payment"} reversed: $${reversal.amount?.toPlainString()} " +
                         "(reversal txn ${reversal.poiTransactionId}, " +
                         "reverses txn ${reversal.reversedMovement?.poiTransactionId})"
                 )
             }
             .onCardCharged { movement ->
-                cardPaymentsCharged++
-                log(
-                    "Card payment $cardPaymentsCharged charged: $${movement.amount?.toPlainString()}" +
-                        " (txn ${movement.poiTransactionId})"
-                )
+                // a Bilt rewards payment is not a card: it is not numbered among the card payments
+                if (movement.isBiltRewardsOnly()) {
+                    log(
+                        "Bilt Rewards payment charged: $${movement.amount?.toPlainString()}" +
+                            " (txn ${movement.poiTransactionId})"
+                    )
+                } else {
+                    cardPaymentsCharged++
+                    log(
+                        "Card payment $cardPaymentsCharged charged: $${movement.amount?.toPlainString()}" +
+                            movement.biltRewardsPart() +
+                            " (txn ${movement.poiTransactionId})"
+                    )
+                }
             }
             .onCardRefunded { movement ->
                 log(
-                    "Card refund committed: $${movement.amount?.toPlainString()}" +
+                    (if (movement.isBiltRewardsOnly()) "Bilt Rewards refund" else "Card refund") +
+                        " committed: $${movement.amount?.toPlainString()}" +
+                        (if (movement.isBiltRewardsOnly()) "" else movement.biltRewardsPart()) +
                         " (txn ${movement.poiTransactionId})"
                 )
             }
@@ -1968,7 +1987,8 @@ class NexoEmulatorController(
             add(PartialApprovalAction.CANCEL_SALE)
         }
         log(
-            "Partial approval: card approved $${partial.approved.toPlainString()} of " +
+            "Partial approval: ${if (partial.isBiltRewards) "Bilt Rewards paid" else "card approved"} " +
+                "$${partial.approved.toPlainString()} of " +
                 "$${partial.requested.toPlainString()}, " +
                 "$${partial.amountDue.toPlainString()} still due"
         )
@@ -1981,6 +2001,7 @@ class NexoEmulatorController(
                 shortfall = partial.shortfall.toPlainString(),
                 amountDue = partial.amountDue.toPlainString(),
                 actions = actions,
+                biltRewards = partial.isBiltRewards,
             ) { action ->
                 synchronized(connectionLock) {
                     if (
@@ -2198,7 +2219,7 @@ class NexoEmulatorController(
     override fun addReturnToBasket(
         saleId: String,
         skus: Set<String>,
-        cardPoiTransactionId: String?,
+        tenderPoiTransactionId: String?,
     ) {
         val conn = connection
         val session = conn?.session
@@ -2259,19 +2280,21 @@ class NexoEmulatorController(
                     return@launch
                 }
                 // Returns restore to the primary OUTSTANDING tender: the card
-                // leg unless an earlier refund already returned it, else the
-                // stored value leg. A sale with several card payments needs the
+                // leg unless an earlier refund already returned it, then a Bilt
+                // Rewards payment, else the stored value leg. A sale with
+                // several card payments, or rewards next to a card, needs the
                 // cashier's pick — each payment is its own refund target.
                 val outstanding = stored.moneyLegs.filterNot { stored.legRefunded(it) }
                 val leg =
-                    if (cardPoiTransactionId != null) {
+                    if (tenderPoiTransactionId != null) {
                         val picked = outstanding.firstOrNull {
-                            it.type == LegType.CARD && it.poiTransactionId == cardPoiTransactionId
+                            (it.type == LegType.CARD || it.type == LegType.BILT_REWARDS) &&
+                                it.poiTransactionId == tenderPoiTransactionId
                         }
                         if (picked == null) {
                             log(
-                                "The chosen card payment ($cardPoiTransactionId) is not on this " +
-                                    "sale or was already refunded in full"
+                                "The chosen card or Bilt Rewards payment ($tenderPoiTransactionId) " +
+                                    "is not on this sale or was already refunded in full"
                             )
                             return@launch
                         }
@@ -2283,6 +2306,10 @@ class NexoEmulatorController(
                             it.type == LegType.CARD &&
                                 stored.availableLegAmount(conn, it)?.signum() != 0
                         }
+                            ?: outstanding.firstOrNull {
+                                it.type == LegType.BILT_REWARDS &&
+                                    stored.availableLegAmount(conn, it)?.signum() != 0
+                            }
                             ?: outstanding.firstOrNull { it.type == LegType.CARD }
                             ?: outstanding.firstOrNull()
                     }
@@ -2530,7 +2557,7 @@ class NexoEmulatorController(
             // partial void only on the same session instance — which this
             // flow closes — so cross-session resume is reconstructed via
             // the store. Gift-card loads reverse first, then CARD,
-            // STORED_VALUE, and loyalty; everything ahead of the failed
+            // BILT_REWARDS, STORED_VALUE, and loyalty; everything ahead of the failed
             // money step must be omitted from the next session's retry.
             val result =
                 try {
@@ -2545,6 +2572,7 @@ class NexoEmulatorController(
                             if (
                                 step == ReversalStep.STORED_VALUE_LOAD ||
                                     step == ReversalStep.CARD ||
+                                    step == ReversalStep.BILT_REWARDS ||
                                     step == ReversalStep.STORED_VALUE
                             ) {
                                 ReversalDecision.ABORT
@@ -2588,14 +2616,32 @@ class NexoEmulatorController(
                     )
                 // each tender payment the void reversed has its own reference and receipts; with
                 // more than one, the popup lists every one instead of the first leg's alone
-                val legs = result.cardReversals + listOfNotNull(result.storedValueReversal)
-                val perLeg = legs.size > 1
+                val legs =
+                    result.cardReversals +
+                        result.biltRewardsReversals +
+                        listOfNotNull(result.storedValueReversal)
+                // a card that rewards paid part of is listed too: its amount splits
+                val perLeg =
+                    legs.size > 1 ||
+                        legs.any { it.biltRewardsAmount?.signum()?.let { s -> s > 0 } == true }
                 val parts = buildList {
                     // the terminal does not always echo the reversed amount
                     add(
                         (if (hasCash) "Terminal movements reversed" else "Refunded") +
                             (result.reversedAmount?.let { " $${it.toPlainString()}" } ?: "")
                     )
+                    // what each tender got back, rewards named apart from the card they shared
+                    // a payment with
+                    if (
+                        result.reversedAmountByTender.any { it.tender == TenderType.BILT_REWARDS }
+                    ) {
+                        add(
+                            "By tender: " +
+                                result.reversedAmountByTender.joinToString(" + ") {
+                                    "${tenderLabel(it.tender)} $${it.amount?.toPlainString() ?: "?"}"
+                                }
+                        )
+                    }
                     if (perLeg) {
                         legs.forEach { add("${reversalLabel(sale, it)} reversed${it.line()}") }
                     }
@@ -2729,6 +2775,22 @@ class NexoEmulatorController(
                         .apply {
                             parseInstant(it.poiTimestamp)?.let(::poiTransactionTimestamp)
                             it.amount?.toBigDecimalOrNull()?.let(::amount)
+                            // the rewards part goes back to the member's rewards, not the card
+                            it.biltRewardsAmount?.toBigDecimalOrNull()?.let(::biltRewardsAmount)
+                        }
+                        .build()
+                )
+            }
+        // every Bilt Rewards payment still standing: the void returns the rewards by reference
+        sale.biltRewardsLegs
+            .filterNot { stored.legRefunded(it) }
+            .forEach {
+                builder.addBiltRewardsPayment(
+                    BiltRewardsPaymentRecord.builder()
+                        .poiTransactionId(it.poiTransactionId)
+                        .apply {
+                            parseInstant(it.poiTimestamp)?.let(::poiTransactionTimestamp)
+                            it.amount?.toBigDecimalOrNull()?.let(::amount)
                         }
                         .build()
                 )
@@ -2802,11 +2864,12 @@ class NexoEmulatorController(
         // every card payment this attempt reversed — a split sale reverses them newest first,
         // so a failure partway leaves the older ones standing
         val reversedCards =
-            sale.cardLegs
+            (sale.cardLegs + sale.biltRewardsLegs)
                 .filterNot { stored.legRefunded(it) }
                 .filter { card ->
                     reversedMovements.any {
-                        it.step == ReversalStep.CARD && it.poiTransactionId == card.poiTransactionId
+                        (it.step == ReversalStep.CARD || it.step == ReversalStep.BILT_REWARDS) &&
+                            it.poiTransactionId == card.poiTransactionId
                     }
                 }
         if (reversedLoads.isEmpty() && reversedCards.isEmpty()) {
@@ -2842,8 +2905,8 @@ class NexoEmulatorController(
         val recorded = records.fold(true) { all, record -> recordRefund(sale.id, record) && all }
         val movements = buildList {
             if (reversedLoads.isNotEmpty()) add("${reversedLoads.size} gift card load(s)")
-            if (reversedCards.size == 1) add("the card leg")
-            if (reversedCards.size > 1) add("${reversedCards.size} card legs")
+            if (reversedCards.size == 1) add("the ${legLabel(sale, reversedCards[0])} leg")
+            if (reversedCards.size > 1) add("${reversedCards.size} card and Bilt Rewards legs")
         }
             .joinToString(" and ")
         log(
@@ -2934,22 +2997,44 @@ class NexoEmulatorController(
         }
     }
 
-    /** "Card 2" for the card payment of a split sale the void reversed, "Gift card", or "Card". */
+    /**
+     * "Card 2" for the card payment of a split sale the void reversed, "Bilt Rewards", "Gift card",
+     * or "Card".
+     */
     private fun reversalLabel(sale: SaleRecord, movement: TenderMovement): String =
         when {
+            movement.tenderType == TenderType.BILT_REWARDS -> "Bilt Rewards"
             movement.tenderType == TenderType.STORED_VALUE -> "Gift card"
             sale.cardLegs.size > 1 ->
                 "Card ${sale.cardLegs.indexOfFirst { it.poiTransactionId == movement.originalPoiTransactionId } + 1}"
             else -> "Card"
         }
 
+    /** How a tender is named for the cashier: Bilt rewards are never called a card. */
+    private fun tenderLabel(tender: TenderType): String =
+        when (tender) {
+            TenderType.BILT_REWARDS -> "Bilt Rewards"
+            TenderType.STORED_VALUE -> "Gift card"
+            TenderType.EXTERNAL -> "Cash"
+            else -> "Card"
+        }
+
     /** The amount and terminal reference of a reversed tender payment, for a log or popup line. */
     private fun TenderMovement.line(): String =
         (amount?.let { " $${it.toPlainString()}" } ?: "") +
+            // the rewards part of a card payment that rewards paid only part of
+            (biltRewardsAmount
+                ?.takeIf { tenderType == TenderType.CARD && it.signum() > 0 }
+                ?.let { " (incl. Bilt Rewards $${it.toPlainString()})" }
+                .orEmpty()) +
             " (txn ${poiTransactionId ?: serviceId})"
 
     private fun legLabel(type: LegType): String =
-        if (type == LegType.STORED_VALUE) "gift card" else "card"
+        when (type) {
+            LegType.STORED_VALUE -> "gift card"
+            LegType.BILT_REWARDS -> "Bilt Rewards"
+            else -> "card"
+        }
 
     /** [legLabel] that numbers the card payments of a split sale: "card 2". */
     private fun legLabel(sale: SaleRecord, leg: TransactionLeg): String {
@@ -3100,13 +3185,19 @@ class NexoEmulatorController(
                     "cash $${result.externalPaymentAmount.toPlainString()} (register-managed; refund manually)"
                 )
             }
+            // Bilt rewards are not a card: each payment they covered in full is listed as itself,
+            // ahead of the cards (the rewards leg runs first)
+            result.biltRewardsPayments.forEach {
+                add("Bilt Rewards $${it.amount.toPlainString()}")
+            }
             if (result.cardPayments.size > 1) {
                 add(
                     "${result.cardPayments.size} cards " +
-                        result.cardPayments.joinToString(" + ") {
-                            "$${it.amount?.toPlainString()}"
-                        }
+                        result.cardPayments.joinToString(" + ") { it.summary() }
                 )
+            } else if (result.cardPayments.size == 1 && result.cardPayments[0].hasBiltRewards()) {
+                // a card that rewards paid part of: "card $9.91 (Visa) + Bilt Rewards $3.30"
+                add(result.cardPayments[0].summary(result.paymentBrand))
             } else if (result.cardAmountCharged.signum() > 0) {
                 add(
                     "card $${result.cardAmountCharged.toPlainString()}" +
@@ -3138,10 +3229,13 @@ class NexoEmulatorController(
             add("Settled $${result.authorizedAmount.toPlainString()}")
             addAll(parts)
             // one line per card payment: amount, brand, last digits, approval code, partial tag
-            if (result.cardPayments.size > 1) {
+            if (result.cardPayments.size > 1 || result.cardPayments.any { it.hasBiltRewards() }) {
                 result.cardPayments.forEachIndexed { index, payment ->
                     add(payment.toUi(index).line)
                 }
+            }
+            if (result.biltRewardsAmount.signum() > 0) {
+                add("Bilt Rewards total $${result.biltRewardsAmount.toPlainString()}")
             }
             result.promotionMessages.forEach { add(it) }
             result.warnings.forEach { add("Warning: $it") }
@@ -3166,6 +3260,9 @@ class NexoEmulatorController(
             )
         }
         log(summary)
+        result.biltRewardsPayments.forEach {
+            log("Bilt Rewards $${it.amount.toPlainString()} (txn ${it.poiTransactionId})")
+        }
         result.cardPayments.forEachIndexed { index, payment -> log(payment.toUi(index).line) }
         result.promotionMessages.forEach { log("Promo: $it") }
         result.warnings.forEach { log("Warning: $it") }
@@ -3196,7 +3293,26 @@ class NexoEmulatorController(
             lastDigits = lastDigits(maskedPan),
             approvalCode = approvalCode,
             partial = isPartialApproval,
+            biltRewardsAmount = biltRewardsAmount.takeIf { hasBiltRewards() }?.toPlainString(),
+            cardAmount = cardAmount.takeIf { hasBiltRewards() }?.toPlainString(),
         )
+
+    /** Whether Bilt rewards paid part of this card payment. */
+    private fun CardPaymentResult.hasBiltRewards(): Boolean = biltRewardsAmount.signum() > 0
+
+    /**
+     * The card part and the rewards part of this payment for the outcome summary: "$9.91 (Visa) +
+     * Bilt Rewards $3.30" — card first, as the card total excludes the rewards. Without rewards it
+     * is the plain amount.
+     */
+    private fun CardPaymentResult.summary(brandOverride: String? = null): String {
+        val brand = (brandOverride ?: paymentBrand)?.let { " ($it)" }.orEmpty()
+        return if (hasBiltRewards()) {
+            "card $${cardAmount.toPlainString()}$brand + Bilt Rewards $${biltRewardsAmount.toPlainString()}"
+        } else {
+            "$${amount?.toPlainString()}"
+        }
+    }
 
     override fun dismissPaymentOutcome() {
         _state.update { it.copy(paymentOutcome = null) }
@@ -3265,6 +3381,8 @@ class NexoEmulatorController(
                         lastDigits = lastDigits(leg.maskedPan),
                         approvalCode = leg.approvalCode,
                         partial = leg.partial,
+                        biltRewardsAmount = leg.biltRewardsAmount,
+                        cardAmount = cardPart(leg),
                         // a voided sale returned every payment, as a completed full refund did
                         refunded = legRefunded(leg) || voided != null,
                         depleted = availableLegAmount(connection, leg)?.signum() == 0,
@@ -3273,7 +3391,25 @@ class NexoEmulatorController(
                             else availableLegAmount(connection, leg)?.toPlainString(),
                     )
                 },
+            biltRewardsPayments =
+                sale.biltRewardsLegs.map { leg ->
+                    BiltRewardsPaymentUi(
+                        amount = leg.amount ?: "?",
+                        poiTransactionId = leg.poiTransactionId,
+                        refunded = legRefunded(leg) || voided != null,
+                        depleted = availableLegAmount(connection, leg)?.signum() == 0,
+                        remainingAmount =
+                            if (legRefunded(leg) || voided != null) "0.00"
+                            else availableLegAmount(connection, leg)?.toPlainString(),
+                    )
+                },
         )
+
+    /** What the card itself paid of a stored card leg: its amount less the rewards part. */
+    private fun cardPart(leg: TransactionLeg): String? {
+        val rewards = leg.biltRewardsAmount?.toBigDecimalOrNull() ?: return null
+        return leg.amount?.toBigDecimalOrNull()?.subtract(rewards)?.toPlainString()
+    }
 
     /**
      * What returning [quantity] units of this line restores: shelf price plus tax, computed exactly
@@ -3592,11 +3728,29 @@ private class StandingMovements {
     fun snapshot(): List<SettlementMovement> = movements.values.toList()
 }
 
+/**
+ * Whether Bilt rewards paid the whole of this charge or refund: the terminal's points leg, which is
+ * never a card. A card movement that rewards paid only part of reports less than its amount.
+ */
+private fun SettlementMovement.isBiltRewardsOnly(): Boolean {
+    val rewards = biltRewardsAmount ?: return false
+    val total = amount ?: return false
+    return rewards.signum() > 0 && rewards.compareTo(total) == 0
+}
+
+/** " (incl. Bilt Rewards $3.30)" for a card movement that rewards paid part of, else nothing. */
+private fun SettlementMovement.biltRewardsPart(): String =
+    biltRewardsAmount
+        ?.takeIf { it.signum() > 0 }
+        ?.let { " (incl. Bilt Rewards $${it.toPlainString()})" }
+        .orEmpty()
+
 /** One line for a charge that may still stand: what it is, how much, and its terminal reference. */
 private fun SettlementMovement.describeStanding(): String {
     val what =
         when (step) {
-            SettlementStep.CARD_CHARGE -> "card payment"
+            SettlementStep.CARD_CHARGE ->
+                if (isBiltRewardsOnly()) "Bilt Rewards payment" else "card payment"
             SettlementStep.STORED_VALUE_CHARGE -> "gift card charge"
             SettlementStep.STORED_VALUE_LOAD -> "gift card load"
             SettlementStep.REBATE_REDEMPTION -> "rebate redemption"

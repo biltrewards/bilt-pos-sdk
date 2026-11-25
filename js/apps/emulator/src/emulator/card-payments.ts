@@ -1,4 +1,5 @@
 import type { CardPaymentResult, Receipt } from '@biltorg/pos-sdk';
+import { cents } from '../money';
 import { lastDigits } from '../store/sale-record';
 import type { CardPaymentUi, OutcomeReceipt } from './state';
 
@@ -14,6 +15,9 @@ export function toCardPaymentUi(payment: CardPaymentResult): CardPaymentUi {
       ? {}
       : { poiTransactionId: payment.poiTransactionId }),
     partial: payment.partialApproval,
+    ...(cents(payment.biltRewardsAmount) > 0
+      ? { biltRewardsAmount: payment.biltRewardsAmount }
+      : {}),
   };
 }
 

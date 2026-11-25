@@ -450,6 +450,76 @@ class TerminalSessionTest {
   }
 
   @Test
+  void aBiltRewardsLegIsReportedApartFromTheCardsAndRoundTripsInTheRecord() throws Exception {
+    String id = createWithMemberAndItem();
+    terminal
+        .replyInOrder(
+            MessageCategoryType.PAYMENT,
+            ScriptedTerminalClient.paymentBiltRewardsPartial("ATT-1", "30.00"),
+            ScriptedTerminalClient.paymentOk("POI-PAY-9", "60.00"))
+        .reply(
+            MessageCategoryType.REVERSAL,
+            "{\"SaleToPOIResponse\":{\"ReversalResponse\":{\"Response\":{\"Result\":\"Success\"}}}}");
+
+    String operationId = submit(id, json("{'type':'settle'}")).path("id").asText();
+    JsonNode result =
+        client.awaitOperation(id, operationId, "succeeded", Duration.ofSeconds(10)).path("result");
+
+    assertEquals("60.00", result.path("cardAmountCharged").asText());
+    assertEquals("30.00", result.path("biltRewardsAmount").asText());
+    assertEquals(1, result.path("cardPayments").size());
+    assertEquals(
+        "POI-PAY-9", result.path("cardPayments").path(0).path("poiTransactionId").asText());
+    assertEquals("0", result.path("cardPayments").path(0).path("biltRewardsAmount").asText());
+    assertEquals("60.00", result.path("cardPayments").path(0).path("cardAmount").asText());
+    JsonNode rewards = result.path("biltRewardsPayments");
+    assertEquals(1, rewards.size());
+    assertEquals("ATT-1", rewards.path(0).path("poiTransactionId").asText());
+    assertEquals("30.00", rewards.path(0).path("amount").asText());
+    assertEquals("60.00", result.path("finalBasket").path("cardPaymentTotal").asText());
+    assertEquals("30.00", result.path("finalBasket").path("biltRewardsTotal").asText());
+    assertEquals("0", result.path("biltRewardsRefundedAmount").asText());
+    JsonNode charge = result.path("movements").path(1);
+    assertEquals("CARD_CHARGE", charge.path("step").asText());
+    assertEquals("30.00", charge.path("biltRewardsAmount").asText());
+
+    // a record carrying the rewards payment voids it after the card, under its own tender
+    String voidId =
+        submit(
+                id,
+                json(
+                    "{'type':'voidTransaction','originalSale':{"
+                        + "'cardPayments':[{'poiTransactionId':'POI-CARD-7','amount':'60.00',"
+                        + "'biltRewardsAmount':'10.00'}],"
+                        + "'biltRewardsPayments':[{'poiTransactionId':'ATT-7','amount':'30.00'}]}}"))
+            .path("id")
+            .asText();
+    JsonNode voided =
+        client.awaitOperation(id, voidId, "succeeded", Duration.ofSeconds(10)).path("result");
+    assertEquals(1, voided.path("cardReversals").size());
+    assertEquals("10.00", voided.path("cardReversals").path(0).path("biltRewardsAmount").asText());
+    assertEquals(1, voided.path("biltRewardsReversals").size());
+    JsonNode rewardsReversal = voided.path("biltRewardsReversals").path(0);
+    assertEquals("BILT_REWARDS", rewardsReversal.path("tenderType").asText());
+    assertEquals("ATT-7", rewardsReversal.path("originalPoiTransactionId").asText());
+    List<String> tenders = new java.util.ArrayList<>();
+    voided
+        .path("reversedAmountByTender")
+        .forEach(
+            leg ->
+                tenders.add(
+                    leg.path("tender").asText()
+                        + " "
+                        + leg.path("poiTransactionId").asText()
+                        + " "
+                        + leg.path("amount").asText()));
+    assertEquals(
+        List.of(
+            "CARD POI-CARD-7 50.00", "BILT_REWARDS POI-CARD-7 10.00", "BILT_REWARDS ATT-7 30.00"),
+        tenders);
+  }
+
+  @Test
   void stepDeadlineAppliesTheDefault() throws Exception {
     host.stop();
     host = host(StepDeadlines.uniform(Duration.ofMillis(300)));

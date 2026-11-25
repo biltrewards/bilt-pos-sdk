@@ -67,6 +67,8 @@ public final class ReversalMovement {
   final Instant poiTransactionTimestamp;
   final BigDecimal amount;
   final TenderType tender;
+  // the rewards part of a card payment rewards paid part of, when this movement returns it whole
+  final BigDecimal biltRewardsAmount;
 
   public ReversalMovement(
       ReversalStep step, String poiTransactionId, Instant poiTransactionTimestamp) {
@@ -85,16 +87,35 @@ public final class ReversalMovement {
       Instant poiTransactionTimestamp,
       BigDecimal amount,
       TenderType tender) {
+    this(step, poiTransactionId, poiTransactionTimestamp, amount, tender, null);
+  }
+
+  /**
+   * A tender movement whose {@code amount} includes {@code biltRewardsAmount} of Bilt rewards (a
+   * card payment rewards paid part of): reversed or refunded in full, the rewards part goes back to
+   * the member's rewards. {@code null} when none or unknown.
+   */
+  public ReversalMovement(
+      ReversalStep step,
+      String poiTransactionId,
+      Instant poiTransactionTimestamp,
+      BigDecimal amount,
+      TenderType tender,
+      BigDecimal biltRewardsAmount) {
     this.step = step;
     this.poiTransactionId = poiTransactionId;
     this.poiTransactionTimestamp = poiTransactionTimestamp;
     this.amount = amount;
     this.tender = tender;
+    this.biltRewardsAmount = biltRewardsAmount;
   }
 
   private static TenderType defaultTender(ReversalStep step) {
     if (step == ReversalStep.CARD) {
       return TenderType.CARD;
+    }
+    if (step == ReversalStep.BILT_REWARDS) {
+      return TenderType.BILT_REWARDS;
     }
     return step == ReversalStep.STORED_VALUE ? TenderType.STORED_VALUE : null;
   }
@@ -155,6 +176,22 @@ public final class ReversalMovement {
       PoiRef redemption,
       PoiRef rebate,
       PoiRef award) {
+    return ofSale(storedValueLoads, cards, List.of(), storedValue, redemption, rebate, award);
+  }
+
+  /**
+   * A sale with Bilt rewards payments too (payments the terminal paid entirely with rewards), given
+   * in the order they were made and reversed newest first, after the card payments: the same
+   * reversal by POI reference, under {@link ReversalStep#BILT_REWARDS}.
+   */
+  public static List<ReversalMovement> ofSale(
+      List<StoredValueLoadRecord> storedValueLoads,
+      List<PoiRef> cards,
+      List<PoiRef> biltRewards,
+      PoiRef storedValue,
+      PoiRef redemption,
+      PoiRef rebate,
+      PoiRef award) {
     List<ReversalMovement> movements = new ArrayList<>();
     for (StoredValueLoadRecord load : storedValueLoads) {
       movements.add(
@@ -173,7 +210,24 @@ public final class ReversalMovement {
       if (!giftCard && cardTxnIds.add(card.txnId)) {
         movements.add(
             new ReversalMovement(
-                ReversalStep.CARD, card.txnId, card.timestamp, card.amount, TenderType.CARD));
+                ReversalStep.CARD,
+                card.txnId,
+                card.timestamp,
+                card.amount,
+                TenderType.CARD,
+                card.biltRewardsAmount));
+      }
+    }
+    for (int i = biltRewards.size() - 1; i >= 0; i--) {
+      PoiRef payment = biltRewards.get(i);
+      if (cardTxnIds.add(payment.txnId)) {
+        movements.add(
+            new ReversalMovement(
+                ReversalStep.BILT_REWARDS,
+                payment.txnId,
+                payment.timestamp,
+                payment.amount,
+                TenderType.BILT_REWARDS));
       }
     }
     add(movements, ReversalStep.STORED_VALUE, storedValue);

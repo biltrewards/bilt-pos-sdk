@@ -20,7 +20,7 @@ import {
 import { connectTo } from '../../../../packages/sdk/test/contract/setup';
 import { CATALOG, customItem, toBasketItem } from '../../src/catalog';
 import { BrowserEmulatorController, totalAfterRebates } from '../../src/emulator/controller';
-import type { MemberLookupKind } from '../../src/emulator/state';
+import { partialApprovalHeadline, type MemberLookupKind } from '../../src/emulator/state';
 import { LineLog } from '../../src/log';
 import {
   planAllocations,
@@ -828,4 +828,120 @@ describe.skipIf(!hostAvailable)('partial approvals against the simulated termina
     expect(message).toContain('Card 1 $50.00');
     expect(message).toContain('Card 2 $32.73');
   });
+});
+
+/**
+ * The host's simulated terminal answers a card payment whose amount in cents ends in 789 as a
+ * rewards-only `Partial` for 40% (the points leg, no card data), and one ending in 321 as approved
+ * in full with 25% in Bilt rewards. The emulator shows those as Bilt Rewards, never as a card.
+ */
+describe.skipIf(!hostAvailable)('Bilt rewards against the simulated terminal', () => {
+  let host: RunningHost;
+  let store: IndexedDbSaleStore;
+  const controllers: BrowserEmulatorController[] = [];
+  const IMPLICIT = { implicit: true, rebates: false, redemption: false, award: false };
+
+  beforeAll(async () => {
+    if (!('location' in hostProbe)) return;
+    buildHost(hostProbe.location);
+    host = await startHost(hostProbe.location, { simulated: true });
+    store = new IndexedDbSaleStore(indexedDB, `contract-rewards-${Date.now()}`);
+  }, 120_000);
+
+  afterAll(async () => {
+    for (const controller of controllers.splice(0)) {
+      controller.endSession();
+      await vi.waitFor(() => expect(controller.getState().sessionId).toBeNull(), 30_000);
+      controller.dispose();
+    }
+    await host?.stop();
+  });
+
+  async function checkoutWith(priceMinor: number) {
+    const controller = new BrowserEmulatorController(
+      {
+        connect: () => connectTo(host.port),
+        sales: store,
+        events: new LineLog(),
+        detailed: new LineLog(),
+        protocol: new LineLog(),
+      },
+      {
+        mode: 'terminal',
+        poiId: POI,
+        saleId: 'LANE-REWARDS',
+        currency: 'USD',
+        storeLocation: 'STR-0142',
+      },
+    );
+    controllers.push(controller);
+    controller.connect();
+    await vi.waitFor(
+      () => expect(controller.getState().connection.phase).toBe('CONNECTED'),
+      30_000,
+    );
+    controller.startSession();
+    await vi.waitFor(() => expect(controller.getState().sessionId).not.toBeNull(), 30_000);
+    await controller.addCustomItem(priceMinor);
+    return controller;
+  }
+
+  it('words the points leg of $17.89 as Bilt Rewards, collects the rest on a card and refunds both', async () => {
+    const controller = await checkoutWith(1789);
+    controller.settle(IMPLICIT, null, true);
+    await vi.waitFor(() => expect(controller.getState().partialApproval).not.toBeNull(), 30_000);
+    const prompt = controller.getState().partialApproval!;
+    expect(prompt.biltRewardsPaid).not.toBeNull();
+    expect(prompt.requested).toBe('17.89');
+    expect(partialApprovalHeadline(prompt)).toMatch(
+      /^Bilt Rewards paid \$7\.\d\d of \$17\.89, \$10\.\d\d still due$/,
+    );
+    const rewards = prompt.biltRewardsPaid!;
+    prompt.choose('ANOTHER_CARD');
+    await vi.waitFor(() => expect(controller.getState().paymentOutcome).not.toBeNull(), 30_000);
+    const outcome = controller.getState().paymentOutcome!;
+    expect(outcome.title).toBe('Settlement complete');
+    expect(outcome.message).toContain(`Bilt Rewards $${rewards}`);
+    // the card paid what the rewards left, and is the only card
+    expect(outcome.message).not.toContain('Card 2');
+    expect(controller.getState().lastPayment).toContain(`Bilt Rewards $${rewards}`);
+    await vi.waitFor(async () => {
+      const [stored] = await store.listSales();
+      expect(stored?.sale.legs.map((leg) => leg.type)).toEqual(['CARD', 'BILT_REWARDS']);
+      expect(stored?.sale.legs[1]?.amount).toBe(rewards);
+    });
+
+    // the sale lists its Bilt Rewards payment apart from the card, and a full refund reverses it
+    const [stored] = await store.listSales();
+    const ui = toStoredSaleUi(stored!, () => 0);
+    expect(ui.cardPayments).toHaveLength(1);
+    expect(ui.biltRewardsPayments).toMatchObject([{ amount: rewards }]);
+    await vi.waitFor(() => expect(controller.getState().sessionId).toBeNull(), 30_000);
+    controller.dismissPaymentOutcome();
+    controller.refundSale(stored!.sale.id);
+    await vi.waitFor(() => expect(controller.getState().paymentOutcome).not.toBeNull(), 60_000);
+    const refund = controller.getState().paymentOutcome!;
+    expect(refund.title).toBe('Refund complete');
+    expect(refund.message).toContain('Bilt Rewards reversed');
+    expect(refund.message).toContain('Returned by tender:');
+  }, 120_000);
+
+  it('shows the 25% Bilt rewards part of a $13.21 card payment as part of the card payment', async () => {
+    const controller = await checkoutWith(1321);
+    controller.settle(IMPLICIT, null, true);
+    await vi.waitFor(() => expect(controller.getState().paymentOutcome).not.toBeNull(), 30_000);
+    const outcome = controller.getState().paymentOutcome!;
+    expect(outcome.title).toBe('Settlement complete');
+    expect(outcome.message).toMatch(/Bilt Rewards \$3\.\d\d \(in the card payment\)/);
+    expect(outcome.message).toMatch(/card \$9\.\d\d/);
+    expect(controller.getState().lastPayment).toMatch(/Bilt Rewards \$3\.\d\d, card \$9\.\d\d/);
+    await vi.waitFor(async () => {
+      const stored = (await store.listSales()).find(
+        (sale) => sale.sale.authorizedAmount === '13.21',
+      );
+      expect(stored?.sale.legs).toMatchObject([
+        { type: 'CARD', amount: '13.21', biltRewardsAmount: expect.stringMatching(/^3\.\d\d$/) },
+      ]);
+    });
+  }, 120_000);
 });

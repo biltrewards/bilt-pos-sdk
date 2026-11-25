@@ -94,7 +94,12 @@ loadScripts(document, 'script');</script>
 <span class="extends-implements">extends <a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Object.html" title="class or interface in java.lang" class="external-link">Object</a></span></div>
 <div class="block">Context supplied to <code>SettlementFlow.onPartialCardApproval</code> when a card payment committed
  with an authorized amount below the amount it requested. By then the payment's movement has been
- published and <code>onCardCharged</code> has fired. The handler returns a <a href="PartialApprovalDecision.html" title="class in com.bilt.pos.session.settlement"><code>PartialApprovalDecision</code></a> for the shortfall.</div>
+ published and <code>onCardCharged</code> has fired. The handler returns a <a href="PartialApprovalDecision.html" title="class in com.bilt.pos.session.settlement"><code>PartialApprovalDecision</code></a> for the shortfall.
+
+ <p>With implicit loyalty and multi-tender on the terminal, the partial payment can be the
+ terminal's Bilt rewards leg: the member's rewards paid <a href="#getApproved()"><code>getApproved()</code></a> and no card was in
+ it. Then <a href="#getBiltRewardsPayment()"><code>getBiltRewardsPayment()</code></a> is that payment and <a href="#isBiltRewards()"><code>isBiltRewards()</code></a> is <code>
+ true</code>; the register should report it to the shopper as rewards, not as a declined card.</div>
 </section>
 <section class="summary">
 <ul class="summary-list">
@@ -138,10 +143,24 @@ loadScripts(document, 'script');</script>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Amount the terminal authorized for this card payment.</div>
 </div>
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a></code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getBiltRewardsAmount()" class="member-name-link">getBiltRewardsAmount</a>()</code></div>
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">The part of <a href="#getApproved()"><code>getApproved()</code></a> the terminal paid with Bilt rewards; zero when it was all
+ card.</div>
+</div>
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="../payment/BiltRewardsPaymentResult.html" title="class in com.bilt.pos.session.payment">BiltRewardsPaymentResult</a></code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getBiltRewardsPayment()" class="member-name-link">getBiltRewardsPayment</a>()</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">This partial payment when Bilt rewards paid all of it (the terminal's points leg, with no card
+ in it), else <code>null</code>.</div>
+</div>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a><wbr>&lt;<a href="../payment/CardPaymentResult.html" title="class in com.bilt.pos.session.payment">CardPaymentResult</a>&gt;</code></div>
 <div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getCardPayments()" class="member-name-link">getCardPayments</a>()</code></div>
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">The card payments this settlement committed so far, in order, this partial one last.</div>
+<div class="block">The card payments this settlement committed so far, in order, this partial one last unless it
+ was a Bilt rewards payment (<a href="#isBiltRewards()"><code>isBiltRewards()</code></a>): rewards payments are not card payments
+ and are never listed.</div>
 </div>
 <div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="SettlementMovement.html" title="class in com.bilt.pos.session.settlement">SettlementMovement</a></code></div>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getMovement()" class="member-name-link">getMovement</a>()</code></div>
@@ -158,9 +177,14 @@ loadScripts(document, 'script');</script>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">What this card payment left unpaid: <a href="#getRequested()"><code>getRequested()</code></a> minus <a href="#getApproved()"><code>getApproved()</code></a>.</div>
 </div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a></code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#toString()" class="member-name-link">toString</a>()</code></div>
-<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>boolean</code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#isBiltRewards()" class="member-name-link">isBiltRewards</a>()</code></div>
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">Whether this partial payment was a Bilt rewards payment rather than a card payment.</div>
+</div>
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a></code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#toString()" class="member-name-link">toString</a>()</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
 </div>
 </div>
 </div>
@@ -218,8 +242,9 @@ loadScripts(document, 'script');</script>
 <section class="detail" id="getCardPayments()">
 <h3>getCardPayments</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a>&lt;<a href="../payment/CardPaymentResult.html" title="class in com.bilt.pos.session.payment">CardPaymentResult</a>&gt;</span>&nbsp;<span class="element-name">getCardPayments</span>()</div>
-<div class="block">The card payments this settlement committed so far, in order, this partial one last. The
- handler can count them to limit how many cards a sale takes.</div>
+<div class="block">The card payments this settlement committed so far, in order, this partial one last unless it
+ was a Bilt rewards payment (<a href="#isBiltRewards()"><code>isBiltRewards()</code></a>): rewards payments are not card payments
+ and are never listed. The handler can count them to limit how many cards a sale takes.</div>
 </section>
 </li>
 <li>
@@ -227,6 +252,29 @@ loadScripts(document, 'script');</script>
 <h3>getMovement</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="SettlementMovement.html" title="class in com.bilt.pos.session.settlement">SettlementMovement</a></span>&nbsp;<span class="element-name">getMovement</span>()</div>
 <div class="block">The <code>CARD_CHARGE</code> movement of this partial card payment.</div>
+</section>
+</li>
+<li>
+<section class="detail" id="getBiltRewardsAmount()">
+<h3>getBiltRewardsAmount</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a></span>&nbsp;<span class="element-name">getBiltRewardsAmount</span>()</div>
+<div class="block">The part of <a href="#getApproved()"><code>getApproved()</code></a> the terminal paid with Bilt rewards; zero when it was all
+ card. Equal to <a href="#getApproved()"><code>getApproved()</code></a> for a Bilt rewards payment.</div>
+</section>
+</li>
+<li>
+<section class="detail" id="getBiltRewardsPayment()">
+<h3>getBiltRewardsPayment</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="../payment/BiltRewardsPaymentResult.html" title="class in com.bilt.pos.session.payment">BiltRewardsPaymentResult</a></span>&nbsp;<span class="element-name">getBiltRewardsPayment</span>()</div>
+<div class="block">This partial payment when Bilt rewards paid all of it (the terminal's points leg, with no card
+ in it), else <code>null</code>.</div>
+</section>
+</li>
+<li>
+<section class="detail" id="isBiltRewards()">
+<h3>isBiltRewards</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type">boolean</span>&nbsp;<span class="element-name">isBiltRewards</span>()</div>
+<div class="block">Whether this partial payment was a Bilt rewards payment rather than a card payment.</div>
 </section>
 </li>
 <li>

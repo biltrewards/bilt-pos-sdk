@@ -135,68 +135,74 @@ loadScripts(document, 'script');</script>
 <div class="col-second even-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4"><code><a href="#builder()" class="member-name-link">builder</a>()</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab1 method-summary-table-tab4">&nbsp;</div>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a><wbr>&lt;<a href="TenderMovement.html" title="class in com.bilt.pos.session">TenderMovement</a>&gt;</code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getCardReversals()" class="member-name-link">getCardReversals</a>()</code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getBiltRewardsReversals()" class="member-name-link">getBiltRewardsReversals</a>()</code></div>
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">Every Bilt rewards payment this call reversed (a payment the terminal paid entirely with Bilt
+ rewards), in the order the requests were sent, each with the terminal's own reference.</div>
+</div>
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a><wbr>&lt;<a href="TenderMovement.html" title="class in com.bilt.pos.session">TenderMovement</a>&gt;</code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getCardReversals()" class="member-name-link">getCardReversals</a>()</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Every card payment this call reversed, in the order the requests were sent (newest card payment
  first), each with the terminal's own reference and receipts.</div>
 </div>
-<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="Receipt.html" title="class in com.bilt.pos.session">Receipt</a></code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getCustomerReceipt()" class="member-name-link">getCustomerReceipt</a>()</code></div>
-<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">Receipt of the first leg this call sent; see <a href="#getCardReversals()"><code>getCardReversals()</code></a> for every card
- payment's.</div>
-</div>
 <div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="Receipt.html" title="class in com.bilt.pos.session">Receipt</a></code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getMerchantReceipt()" class="member-name-link">getMerchantReceipt</a>()</code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getCustomerReceipt()" class="member-name-link">getCustomerReceipt</a>()</code></div>
 <div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Receipt of the first leg this call sent; see <a href="#getCardReversals()"><code>getCardReversals()</code></a> for every card
  payment's.</div>
 </div>
-<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>int</code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getPointsReversed()" class="member-name-link">getPointsReversed</a>()</code></div>
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="Receipt.html" title="class in com.bilt.pos.session">Receipt</a></code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getMerchantReceipt()" class="member-name-link">getMerchantReceipt</a>()</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">Receipt of the first leg this call sent; see <a href="#getCardReversals()"><code>getCardReversals()</code></a> for every card
+ payment's.</div>
+</div>
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>int</code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getPointsReversed()" class="member-name-link">getPointsReversed</a>()</code></div>
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Loyalty points reversed alongside the void; best-effort.</div>
 </div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a></code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getPoiTransactionId()" class="member-name-link">getPoiTransactionId</a>()</code></div>
-<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a></code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getPoiTransactionId()" class="member-name-link">getPoiTransactionId</a>()</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Terminal reference of the first reversal this call sent (the newest card payment when there are
  several), for later status checks; see <a href="#getCardReversals()"><code>getCardReversals()</code></a> for every card payment's
  reference and receipts.</div>
 </div>
-<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/time/Instant.html" title="class or interface in java.time" class="external-link">Instant</a></code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getPoiTransactionTimestamp()" class="member-name-link">getPoiTransactionTimestamp</a>()</code></div>
-<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>int</code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getRemainingPointBalance()" class="member-name-link">getRemainingPointBalance</a>()</code></div>
-<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/time/Instant.html" title="class or interface in java.time" class="external-link">Instant</a></code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getPoiTransactionTimestamp()" class="member-name-link">getPoiTransactionTimestamp</a>()</code></div>
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>int</code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getRemainingPointBalance()" class="member-name-link">getRemainingPointBalance</a>()</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Member's balance after the reversal; <code>0</code> when not reported.</div>
 </div>
-<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a></code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getReversedAmount()" class="member-name-link">getReversedAmount</a>()</code></div>
-<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/math/BigDecimal.html" title="class or interface in java.math" class="external-link">BigDecimal</a></code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getReversedAmount()" class="member-name-link">getReversedAmount</a>()</code></div>
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">Amount reversed by this call's money tender legs: the sum of <a href="#getReversedAmountByTender()"><code>getReversedAmountByTender()</code></a>.</div>
 </div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a><wbr>&lt;<a href="TenderAmount.html" title="class in com.bilt.pos.session">TenderAmount</a>&gt;</code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getReversedAmountByTender()" class="member-name-link">getReversedAmountByTender</a>()</code></div>
-<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
-<div class="block">The amount each money tender leg of this call returned, in the order the legs were sent: one
- entry per card payment and one for a stored value payment.</div>
-</div>
-<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a></code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getServiceId()" class="member-name-link">getServiceId</a>()</code></div>
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a><wbr>&lt;<a href="TenderAmount.html" title="class in com.bilt.pos.session">TenderAmount</a>&gt;</code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getReversedAmountByTender()" class="member-name-link">getReversedAmountByTender</a>()</code></div>
 <div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="block">The amount each money tender leg of this call returned, in the order the legs were sent: one
+ entry per card payment, one per Bilt rewards payment and one for a stored value payment.</div>
+</div>
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/String.html" title="class or interface in java.lang" class="external-link">String</a></code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getServiceId()" class="member-name-link">getServiceId</a>()</code></div>
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">The Nexo <code>ServiceID</code> of the request whose terminal reference <a href="#getPoiTransactionId()"><code>getPoiTransactionId()</code></a> reports; <code>null</code> when that is absent.</div>
 </div>
-<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="TenderMovement.html" title="class in com.bilt.pos.session">TenderMovement</a></code></div>
-<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getStoredValueReversal()" class="member-name-link">getStoredValueReversal</a>()</code></div>
-<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
+<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="TenderMovement.html" title="class in com.bilt.pos.session">TenderMovement</a></code></div>
+<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#getStoredValueReversal()" class="member-name-link">getStoredValueReversal</a>()</code></div>
+<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">
 <div class="block">The stored value (gift card) payment this call reversed, with the terminal's own reference and
  receipts for it; <code>null</code> when this call reversed none.</div>
 </div>
-<div class="col-first even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>boolean</code></div>
-<div class="col-second even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#isSuccess()" class="member-name-link">isSuccess</a>()</code></div>
-<div class="col-last even-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
+<div class="col-first odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code>boolean</code></div>
+<div class="col-second odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4"><code><a href="#isSuccess()" class="member-name-link">isSuccess</a>()</code></div>
+<div class="col-last odd-row-color method-summary-table method-summary-table-tab2 method-summary-table-tab4">&nbsp;</div>
 </div>
 </div>
 </div>
@@ -280,7 +286,16 @@ loadScripts(document, 'script');</script>
 <div class="block">Every card payment this call reversed, in the order the requests were sent (newest card payment
  first), each with the terminal's own reference and receipts. Empty when no card payment was
  reversed by this call. Every entry's <a href="TenderMovement.html#getTenderType()"><code>TenderMovement.getTenderType()</code></a> is <code>CARD</code>.
- The stored value leg is <a href="#getStoredValueReversal()"><code>getStoredValueReversal()</code></a>.</div>
+ The stored value leg is <a href="#getStoredValueReversal()"><code>getStoredValueReversal()</code></a>, and a Bilt rewards payment is <a href="#getBiltRewardsReversals()"><code>getBiltRewardsReversals()</code></a>.</div>
+</section>
+</li>
+<li>
+<section class="detail" id="getBiltRewardsReversals()">
+<h3>getBiltRewardsReversals</h3>
+<div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a>&lt;<a href="TenderMovement.html" title="class in com.bilt.pos.session">TenderMovement</a>&gt;</span>&nbsp;<span class="element-name">getBiltRewardsReversals</span>()</div>
+<div class="block">Every Bilt rewards payment this call reversed (a payment the terminal paid entirely with Bilt
+ rewards), in the order the requests were sent, each with the terminal's own reference. Empty
+ when none was. Every entry's <a href="TenderMovement.html#getTenderType()"><code>TenderMovement.getTenderType()</code></a> is <code>BILT_REWARDS</code>.</div>
 </section>
 </li>
 <li>
@@ -296,7 +311,9 @@ loadScripts(document, 'script');</script>
 <h3>getReversedAmountByTender</h3>
 <div class="member-signature"><span class="modifiers">public</span>&nbsp;<span class="return-type"><a href="https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/List.html" title="class or interface in java.util" class="external-link">List</a>&lt;<a href="TenderAmount.html" title="class in com.bilt.pos.session">TenderAmount</a>&gt;</span>&nbsp;<span class="element-name">getReversedAmountByTender</span>()</div>
 <div class="block">The amount each money tender leg of this call returned, in the order the legs were sent: one
- entry per card payment and one for a stored value payment. Loyalty movements are not tenders
+ entry per card payment, one per Bilt rewards payment and one for a stored value payment. A card
+ payment that Bilt rewards paid part of has two entries with its reference, its card part under
+ <code>CARD</code> and its rewards part under <code>BILT_REWARDS</code>. Loyalty movements are not tenders
  and are not listed. When there is any entry, the entries sum to <a href="#getReversedAmount()"><code>getReversedAmount()</code></a>;
  when a leg's amount is unknown, that entry's amount and <a href="#getReversedAmount()"><code>getReversedAmount()</code></a> are both
  <code>null</code>.</div>

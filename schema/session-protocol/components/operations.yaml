@@ -251,7 +251,8 @@ SettleRequest:
     `options.cardPayments` splits the card amount into several card payments. A card payment
     the terminal approves for less than it requested asks the register through a
     `PARTIAL_CARD_APPROVAL` step when declared; otherwise the SDK charges the shortfall on
-    another card by itself, up to 3 card requests in total.
+    another card by itself, up to 3 card requests in total (a Bilt rewards partial, the
+    terminal's points leg, counts as one).
   required: [type]
   properties:
     type:
@@ -407,7 +408,7 @@ OperationStep:
     | `ReversalFlow.beforeStep` (`refund`, `voidTransaction`, retries of `refundUnlinked`) | `BEFORE_STEP` | none | none; the leg is sent |
     | `onRebatesRedeemed`, `onPointsRedeemed`, `onGiftCardPayment` | `TOTAL_REQUIRED` | `total` | `suggestedTotal`: the previous total minus the step's amount |
     | `SettlementFlow.onError` | `RECOVERY_REQUIRED` | `recovery` | `ABORT` |
-    | `SettlementFlow.onPartialCardApproval` | `PARTIAL_CARD_APPROVAL` | `partialApprovalDecision` | `ABORT`; a request that does not declare the kind never raises the step, and the SDK charges the shortfall on another card by itself (3 card requests in total) |
+    | `SettlementFlow.onPartialCardApproval` | `PARTIAL_CARD_APPROVAL` | `partialApprovalDecision` | `ABORT`; a request that does not declare the kind never raises the step, and the SDK charges the shortfall on another card by itself (3 card requests in total, a Bilt rewards partial counting as one) |
     | `ReversalFlow.onError` | `REVERSAL_DECISION_REQUIRED` | `decision` | the Java default policy: `ABORT` for a money step or a loyalty movement that is the substance of the reversal, `SKIP` for a loyalty movement riding along with a money step; `default.decision` says which |
 
     `onMovement` and the per-movement callbacks, `onCardCharged` and `onAwarded` are

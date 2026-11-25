@@ -74,6 +74,31 @@ export function paymentApproving(...shares: number[]): Script {
   };
 }
 
+/**
+ * The terminal's Bilt rewards leg first (implicit loyalty with multi-tender on): a `Partial` for
+ * `share` of the first payment, all of it Bilt rewards (`biltRewardsAmount`), with no card data,
+ * as `ATT-1`. Every later payment is approved in full, as `POI-PAY-n`.
+ */
+export function paymentWithBiltRewards(share: number): Script {
+  let count = 0;
+  return (request) => {
+    const requested =
+      request.SaleToPOIRequest?.PaymentRequest?.PaymentTransaction?.AmountsReq?.RequestedAmount ??
+      0;
+    count += 1;
+    if (count === 1) {
+      const rewards = (requested * share).toFixed(2);
+      return (
+        '{"SaleToPOIResponse":{"PaymentResponse":{' +
+        `"Response":{"Result":"Partial","AdditionalResponse":"biltRewardsAmount=${rewards}"},` +
+        '"POIData":{"POITransactionID":{"TransactionID":"ATT-1","TimeStamp":"2026-07-20T10:00:02Z"}},' +
+        `"PaymentResult":{"AmountsResp":{"Currency":"USD","AuthorizedAmount":${rewards}}}}}}`
+      );
+    }
+    return paymentEcho(request).replace('POI-PAY-1', `POI-PAY-${count - 1}`);
+  };
+}
+
 function keyOf(body: NexoBody): string | undefined {
   const request = body.SaleToPOIRequest;
   const category = request?.MessageHeader?.MessageCategory;

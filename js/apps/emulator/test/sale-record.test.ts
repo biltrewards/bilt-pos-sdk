@@ -13,6 +13,7 @@ import {
 } from '../src/emulator/returns';
 import { defaultReversalDecision, reversalProgress } from '../src/store/reversals';
 import {
+  biltRewardsLegs,
   isFullyRefunded,
   legOf,
   originalSaleRecord,
@@ -52,6 +53,8 @@ function result(overrides: Partial<SettlementResult> = {}): SettlementResult {
     cardPayments: [
       {
         amount: '62.31',
+        biltRewardsAmount: '0',
+        cardAmount: '62.31',
         poiTransactionId: 'POI-PAY-1',
         poiTransactionTimestamp: '2026-10-06T14:03:10Z',
         approvalCode: 'A1B2C3',
@@ -261,6 +264,7 @@ describe('return and refund plans', () => {
       success: true,
       reversedAmount: '62.31',
       cardReversals: [],
+      biltRewardsReversals: [],
       reversedAmountByTender: [{ tender: 'CARD', poiTransactionId: 'POI-PAY-1', amount: '62.31' }],
       poiTransactionId: 'POI-V-1',
       pointsReversed: 62,
@@ -274,6 +278,7 @@ describe('return and refund plans', () => {
 
   it('mirrors the Java default reversal policy', () => {
     expect(defaultReversalDecision('CARD')).toBe('ABORT');
+    expect(defaultReversalDecision('BILT_REWARDS')).toBe('ABORT');
     expect(defaultReversalDecision('STORED_VALUE_LOAD')).toBe('ABORT');
     expect(defaultReversalDecision('AWARD')).toBe('SKIP');
     expect(defaultReversalDecision(null)).toBe('ABORT');
@@ -325,6 +330,8 @@ describe('a sale with several card payments', () => {
     cardPayments: [
       {
         amount: '20.00',
+        biltRewardsAmount: '0',
+        cardAmount: '20.00',
         poiTransactionId: 'POI-A',
         poiTransactionTimestamp: '2026-10-06T14:03:10Z',
         paymentBrand: 'Visa',
@@ -333,6 +340,8 @@ describe('a sale with several card payments', () => {
       },
       {
         amount: '42.31',
+        biltRewardsAmount: '0',
+        cardAmount: '42.31',
         poiTransactionId: 'POI-B',
         poiTransactionTimestamp: '2026-10-06T14:04:10Z',
         paymentBrand: 'Mastercard',
@@ -479,5 +488,215 @@ describe('a sale with several card payments', () => {
     const [cardA, cardB] = sale.legs.filter((leg) => leg.type === 'CARD');
     expect(remainingLegAmount(after, cardA!)).toBe('0.00');
     expect(remainingLegAmount(after, cardB!)).toBe('42.31');
+  });
+});
+
+describe('a sale Bilt rewards paid part of', () => {
+  // The terminal's points leg (40% of the basket) answered as its own payment; a card paid the rest.
+  const REWARDS_PAYMENT = {
+    amount: '14.92',
+    poiTransactionId: 'POI-R',
+    poiTransactionTimestamp: '2026-10-06T14:03:05Z',
+  };
+  const CARD_PAYMENT = {
+    amount: '22.39',
+    biltRewardsAmount: '0',
+    cardAmount: '22.39',
+    poiTransactionId: 'POI-C',
+    poiTransactionTimestamp: '2026-10-06T14:03:10Z',
+    approvalCode: 'AP1',
+    paymentBrand: 'Visa',
+    maskedPan: '************4242',
+    partialApproval: false,
+  };
+  const lamp = fx.basket([
+    fx.lineItem({
+      sku: 'SKU-0013',
+      description: 'Desk Lamp',
+      unitPrice: '34.99',
+      taxRate: '0.06625',
+    }),
+  ]);
+  const mixedSale = (): SettlementResult => ({
+    ...fx.settlementResult(lamp, '37.31'),
+    biltRewardsAmount: '14.92',
+    biltRewardsPayments: [REWARDS_PAYMENT],
+    cardAmountCharged: '22.39',
+    cardPayments: [CARD_PAYMENT],
+    poiTransactionId: 'POI-C',
+    movements: [],
+  });
+  const rewardsOnly = (): SettlementResult => ({
+    ...fx.settlementResult(lamp, '37.31'),
+    biltRewardsAmount: '37.31',
+    biltRewardsPayments: [{ ...REWARDS_PAYMENT, amount: '37.31' }],
+    cardAmountCharged: '0.00',
+    cardPayments: [],
+    // a sale with no card payment reports its first rewards payment in the single-payment fields
+    poiTransactionId: 'POI-R',
+    movements: [],
+  });
+  const storedOf = (settled: SettlementResult): StoredSale => ({
+    sale: toSaleRecord(settled, CONTEXT),
+    refunds: [],
+    voided: null,
+  });
+
+  it('records a rewards payment as its own leg, never a card leg', () => {
+    const { sale } = storedOf(mixedSale());
+    expect(sale.legs.filter((leg) => leg.type === 'CARD')).toMatchObject([
+      { poiTransactionId: 'POI-C', amount: '22.39' },
+    ]);
+    expect(biltRewardsLegs(sale)).toMatchObject([
+      { type: 'BILT_REWARDS', poiTransactionId: 'POI-R', amount: '14.92' },
+    ]);
+    const cardOnly = sale.legs.find((leg) => leg.type === 'CARD');
+    expect(cardOnly).not.toHaveProperty('biltRewardsAmount');
+  });
+
+  it('records no card leg for a rewards-only sale although its single-payment fields name one', () => {
+    const { sale } = storedOf(rewardsOnly());
+    expect(sale.legs.map((leg) => leg.type)).toEqual(['BILT_REWARDS']);
+    expect(sale.legs[0]).toMatchObject({ poiTransactionId: 'POI-R', amount: '37.31' });
+  });
+
+  it('keeps the rewards part of a mixed card payment on its leg, through the store', async () => {
+    const settled: SettlementResult = {
+      ...mixedSale(),
+      biltRewardsPayments: [],
+      cardPayments: [
+        { ...CARD_PAYMENT, amount: '37.31', biltRewardsAmount: '9.33', cardAmount: '27.98' },
+      ],
+    };
+    const store = new IndexedDbSaleStore(indexedDB, 'bilt-rewards-roundtrip');
+    await store.recordSale(toSaleRecord(settled, CONTEXT));
+    const found = await store.findSale('sale-1');
+    expect(found?.sale.legs).toMatchObject([
+      { type: 'CARD', poiTransactionId: 'POI-C', amount: '37.31', biltRewardsAmount: '9.33' },
+    ]);
+    expect(toStoredSaleUi(found!, () => 0).cardPayments).toMatchObject([
+      { poiTransactionId: 'POI-C', biltRewardsAmount: '9.33' },
+    ]);
+  });
+
+  it('voids the rewards payments after the card, and sends a mixed card payment as a list', () => {
+    const record = originalSaleRecord(storedOf(mixedSale()));
+    expect(record.cardPoiTransactionId).toBe('POI-C');
+    expect(record.biltRewardsPayments).toEqual([
+      {
+        poiTransactionId: 'POI-R',
+        poiTransactionTimestamp: '2026-10-06T14:03:05Z',
+        amount: '14.92',
+      },
+    ]);
+    const rewardsOnlyRecord = originalSaleRecord(storedOf(rewardsOnly()));
+    expect(rewardsOnlyRecord.biltRewardsPayments).toHaveLength(1);
+    expect(rewardsOnlyRecord).not.toHaveProperty('cardPoiTransactionId');
+    expect(rewardsOnlyRecord).not.toHaveProperty('cardPayments');
+
+    const mixedCard: SettlementResult = {
+      ...mixedSale(),
+      biltRewardsPayments: [],
+      cardPayments: [
+        { ...CARD_PAYMENT, amount: '37.31', biltRewardsAmount: '9.33', cardAmount: '27.98' },
+      ],
+    };
+    const mixed = originalSaleRecord(storedOf(mixedCard));
+    expect(mixed.cardPayments).toMatchObject([
+      { poiTransactionId: 'POI-C', biltRewardsAmount: '9.33' },
+    ]);
+    expect(mixed).not.toHaveProperty('cardPoiTransactionId');
+    expect(mixed).not.toHaveProperty('biltRewardsPayments');
+  });
+
+  it('omits a rewards payment a stopped void already reversed', () => {
+    const stored = storedOf(mixedSale());
+    const progress = reversalProgress(stored, [
+      { step: 'CARD', poiTransactionId: 'POI-C', amount: '22.39' },
+      { step: 'BILT_REWARDS', poiTransactionId: 'POI-R', amount: '14.92' },
+    ] as never);
+    expect(progress).toMatchObject([
+      { leg: 'CARD', legPoiTransactionId: 'POI-C' },
+      { leg: 'BILT_REWARDS', legPoiTransactionId: 'POI-R' },
+    ]);
+    const retried = originalSaleRecord({ ...stored, refunds: [progress[1]!] });
+    expect(retried).not.toHaveProperty('biltRewardsPayments');
+    expect(retried.cardPoiTransactionId).toBe('POI-C');
+    expect(defaultReversalDecision('BILT_REWARDS')).toBe('ABORT');
+  });
+
+  it('lists the rewards payment apart from the cards and refunds it once reversed', () => {
+    const stored = storedOf(mixedSale());
+    const ui = toStoredSaleUi(stored, () => 0);
+    expect(ui.cardPayments).toHaveLength(1);
+    expect(ui.biltRewardsPayments).toEqual([
+      { poiTransactionId: 'POI-R', amount: '14.92', refunded: false, remainingMinor: 1492 },
+    ]);
+    const reversed = reversalProgress(stored, [
+      { step: 'BILT_REWARDS', poiTransactionId: 'POI-R', amount: '14.92' },
+    ] as never);
+    const after = toStoredSaleUi({ ...stored, refunds: reversed }, () => 0);
+    expect(after.biltRewardsPayments[0]).toMatchObject({ refunded: true, remainingMinor: 0 });
+    expect(after.cardPayments[0]).toMatchObject({ refunded: false });
+    // the sale counts as refunded only once every money leg is
+    expect(isFullyRefunded({ ...stored, refunds: reversed })).toBe(false);
+  });
+
+  it('returns to the card by default and to the rewards payment when it is picked', () => {
+    const stored = storedOf(mixedSale());
+    const skus = new Set(['SKU-0013']);
+    const byDefault = planReturn(stored, skus, () => 0);
+    expect('pending' in byDefault && byDefault.pending.leg.type).toBe('CARD');
+    const picked = planReturn(stored, skus, () => 0, 'POI-R');
+    if (!('pending' in picked)) throw new Error(picked.error);
+    expect(picked.pending.leg.type).toBe('BILT_REWARDS');
+    expect(picked.cardNumber).toBe(0);
+    expect(picked.pending.legCapacityMinor).toBe(1492);
+    const { returns, allocations } = planAllocations([picked.pending], 3731);
+    // the rewards payment only collected $14.92; the register pays out the rest
+    expect(allocations).toEqual([
+      {
+        type: 'BILT_REWARDS',
+        amount: '14.92',
+        originalPoiTransactionId: 'POI-R',
+        originalPoiTransactionTimestamp: '2026-10-06T14:03:05Z',
+      },
+      { type: 'EXTERNAL', amount: '22.39' },
+    ]);
+    const { records, parts } = settledReturns(returns, {
+      ...mixedSale(),
+      movements: [
+        {
+          step: 'CARD_REFUND',
+          target: { type: 'SALES' },
+          amount: '14.92',
+          biltRewardsAmount: '14.92',
+          poiTransactionId: 'POI-RF',
+        },
+      ],
+    });
+    expect(parts[0]).toContain('$14.92 to Bilt Rewards');
+    expect(parts[0]).toContain('Bilt Rewards collected less than the shelf value');
+    expect(records[0]).toMatchObject({
+      leg: 'BILT_REWARDS',
+      legPoiTransactionId: 'POI-R',
+      tenderAmount: '14.92',
+      poiTransactionId: 'POI-RF',
+    });
+  });
+
+  it('defaults a rewards-only sale to its rewards payment, not to the register', () => {
+    const plan = planReturn(storedOf(rewardsOnly()), new Set(['SKU-0013']), () => 0);
+    expect('pending' in plan && plan.pending.leg.type).toBe('BILT_REWARDS');
+  });
+
+  it('refuses a return to a rewards payment that was already refunded', () => {
+    const stored = storedOf(mixedSale());
+    const reversed = reversalProgress(stored, [
+      { step: 'BILT_REWARDS', poiTransactionId: 'POI-R', amount: '14.92' },
+    ] as never);
+    expect(
+      planReturn({ ...stored, refunds: reversed }, new Set(['SKU-0013']), () => 0, 'POI-R'),
+    ).toMatchObject({ error: expect.stringContaining('already refunded') });
   });
 });

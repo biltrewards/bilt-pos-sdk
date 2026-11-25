@@ -44,6 +44,8 @@ function twoCards(): SettlementResult {
     cardPayments: [
       {
         amount: '20.00',
+        biltRewardsAmount: '0',
+        cardAmount: '20.00',
         poiTransactionId: 'POI-A',
         poiTransactionTimestamp: '2026-10-06T14:03:10Z',
         approvalCode: 'AP0001',
@@ -54,6 +56,8 @@ function twoCards(): SettlementResult {
       },
       {
         amount: '17.31',
+        biltRewardsAmount: '0',
+        cardAmount: '17.31',
         poiTransactionId: 'POI-B',
         poiTransactionTimestamp: '2026-10-06T14:04:10Z',
         approvalCode: 'AP0002',

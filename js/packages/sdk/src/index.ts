@@ -60,6 +60,8 @@ export type {
   BasketItemType,
   BasketLineItem,
   CardAcquisitionOptions,
+  BiltRewardsPaymentRecord,
+  BiltRewardsPaymentResult,
   CardAcquisitionResult,
   CardPaymentRecord,
   CardPaymentResult,

@@ -43,6 +43,7 @@
         "pointDiscountTotal": "0.00",
         "storedValueTotal": "0.00",
         "cardPaymentTotal": "3.43",
+        "biltRewardsTotal": "0.00",
         "externalPaymentTotal": "0.00",
         "updatedAt": "2026-10-06T14:06:21.700Z"
       },
@@ -53,6 +54,8 @@
       "cardPayments": [
         {
           "amount": "3.43",
+          "biltRewardsAmount": "0",
+          "cardAmount": "3.43",
           "poiTransactionId": "POI-88214",
           "poiTransactionTimestamp": "2026-10-06T14:06:19.000Z",
           "approvalCode": "A1B2C3",
@@ -65,6 +68,8 @@
           "partialApproval": false
         }
       ],
+      "biltRewardsAmount": "0",
+      "biltRewardsPayments": [],
       "externalPaymentAmount": "0.00",
       "approvalCode": "A1B2C3",
       "acquirerTransactionId": "ACQ-99120031",
@@ -87,6 +92,7 @@
       "awardPoiTransactionId": "POI-88215",
       "awardPoiTransactionTimestamp": "2026-10-06T14:06:21.000Z",
       "cardRefundedAmount": "0.00",
+      "biltRewardsRefundedAmount": "0.00",
       "storedValueRefundedAmount": "0.00",
       "externalRefundedAmount": "0.00",
       "loyaltyRefundedAmount": "0.00",

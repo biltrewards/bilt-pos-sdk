@@ -210,7 +210,16 @@ export function partialApprovalStep(stepId: string, approved: string, inMs = 120
     requested: '100.00',
     shortfall,
     amountDue: shortfall,
-    cardPayments: [{ amount: approved, poiTransactionId: 'POI-1', partialApproval: true }],
+    cardPayments: [
+      {
+        amount: approved,
+        biltRewardsAmount: '0',
+        cardAmount: approved,
+        poiTransactionId: 'POI-1',
+        partialApproval: true,
+      },
+    ],
+    biltRewardsAmount: '0',
     movement: {
       step: 'CARD_CHARGE',
       target: { type: 'SALES' },
@@ -246,6 +255,7 @@ export function rebateStep(stepId: string, suggestedTotal: string, inMs = 30_000
         pointDiscountTotal: '0',
         storedValueTotal: '0',
         cardPaymentTotal: '0',
+        biltRewardsTotal: '0',
         externalPaymentTotal: '0',
         updatedAt: new Date().toISOString(),
       },

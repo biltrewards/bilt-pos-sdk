@@ -100,7 +100,7 @@ class ScreenshotGenerator {
         override fun addReturnToBasket(
             saleId: String,
             skus: Set<String>,
-            cardPoiTransactionId: String?,
+            tenderPoiTransactionId: String?,
         ) = Unit
 
         override fun clearBasket() = Unit

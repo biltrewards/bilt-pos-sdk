@@ -75,6 +75,7 @@ final class ReversalGuards {
   void requireNoReversedMoneyLeg() {
     if (hasReversed(ReversalStep.STORED_VALUE_LOAD)
         || hasReversed(ReversalStep.CARD)
+        || hasReversed(ReversalStep.BILT_REWARDS)
         || hasReversed(ReversalStep.STORED_VALUE)) {
       throw new SessionException(
           new SessionError(

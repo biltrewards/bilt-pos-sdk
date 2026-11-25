@@ -35,6 +35,7 @@ import com.bilt.pos.session.input.ConfirmationOptions;
 import com.bilt.pos.session.input.InputOptions;
 import com.bilt.pos.session.input.MenuOptions;
 import com.bilt.pos.session.input.PinOptions;
+import com.bilt.pos.session.settlement.BiltRewardsPaymentRecord;
 import com.bilt.pos.session.settlement.CardPayment;
 import com.bilt.pos.session.settlement.CardPaymentRecord;
 import com.bilt.pos.session.settlement.ExternalPayment;
@@ -195,6 +196,7 @@ public final class Parsers {
     putTotal(node, "pointDiscountTotal", builder::pointDiscountTotal);
     putTotal(node, "storedValueTotal", builder::storedValueTotal);
     putTotal(node, "cardPaymentTotal", builder::cardPaymentTotal);
+    putTotal(node, "biltRewardsTotal", builder::biltRewardsTotal);
     putTotal(node, "externalPaymentTotal", builder::externalPaymentTotal);
     Instant updatedAt = Json.instant(node, "updatedAt");
     if (updatedAt != null) {
@@ -703,12 +705,24 @@ public final class Parsers {
                 .poiTransactionId(Json.requireText(payment, "poiTransactionId"))
                 .poiTransactionTimestamp(Json.instant(payment, "poiTransactionTimestamp"))
                 .amount(Json.decimal(payment, "amount"))
+                .biltRewardsAmount(Json.decimal(payment, "biltRewardsAmount"))
                 .build());
       }
     } else {
       builder
           .cardPoiTransactionId(Json.text(node, "cardPoiTransactionId"))
           .cardPoiTransactionTimestamp(Json.instant(node, "cardPoiTransactionTimestamp"));
+    }
+    ArrayNode biltRewardsPayments = Json.array(node, "biltRewardsPayments");
+    if (biltRewardsPayments != null) {
+      for (JsonNode payment : biltRewardsPayments) {
+        builder.addBiltRewardsPayment(
+            BiltRewardsPaymentRecord.builder()
+                .poiTransactionId(Json.requireText(payment, "poiTransactionId"))
+                .poiTransactionTimestamp(Json.instant(payment, "poiTransactionTimestamp"))
+                .amount(Json.decimal(payment, "amount"))
+                .build());
+      }
     }
     ArrayNode loads = Json.array(node, "storedValueLoads");
     if (loads != null) {

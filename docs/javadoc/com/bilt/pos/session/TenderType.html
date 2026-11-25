@@ -119,16 +119,21 @@ loadScripts(document, 'script');</script>
 <div class="summary-table two-column-summary">
 <div class="table-header col-first">Enum Constant</div>
 <div class="table-header col-last">Description</div>
-<div class="col-first even-row-color"><code><a href="#CARD" class="member-name-link">CARD</a></code></div>
+<div class="col-first even-row-color"><code><a href="#BILT_REWARDS" class="member-name-link">BILT_REWARDS</a></code></div>
 <div class="col-last even-row-color">
+<div class="block">Bilt rewards the terminal spent inside a payment (implicit loyalty), reversed or refunded on
+ the terminal by the payment's POI reference.</div>
+</div>
+<div class="col-first odd-row-color"><code><a href="#CARD" class="member-name-link">CARD</a></code></div>
+<div class="col-last odd-row-color">
 <div class="block">A card payment, reversed or refunded on the terminal.</div>
 </div>
-<div class="col-first odd-row-color"><code><a href="#EXTERNAL" class="member-name-link">EXTERNAL</a></code></div>
-<div class="col-last odd-row-color">
+<div class="col-first even-row-color"><code><a href="#EXTERNAL" class="member-name-link">EXTERNAL</a></code></div>
+<div class="col-last even-row-color">
 <div class="block">A register-managed tender such as cash.</div>
 </div>
-<div class="col-first even-row-color"><code><a href="#STORED_VALUE" class="member-name-link">STORED_VALUE</a></code></div>
-<div class="col-last even-row-color">
+<div class="col-first odd-row-color"><code><a href="#STORED_VALUE" class="member-name-link">STORED_VALUE</a></code></div>
+<div class="col-last odd-row-color">
 <div class="block">A stored value (gift card) payment, reversed or refunded on the terminal.</div>
 </div>
 </div>
@@ -188,6 +193,16 @@ the order they are declared.</div>
 <h3>STORED_VALUE</h3>
 <div class="member-signature"><span class="modifiers">public static final</span>&nbsp;<span class="return-type"><a href="TenderType.html" title="enum class in com.bilt.pos.session">TenderType</a></span>&nbsp;<span class="element-name">STORED_VALUE</span></div>
 <div class="block">A stored value (gift card) payment, reversed or refunded on the terminal.</div>
+</section>
+</li>
+<li>
+<section class="detail" id="BILT_REWARDS">
+<h3>BILT_REWARDS</h3>
+<div class="member-signature"><span class="modifiers">public static final</span>&nbsp;<span class="return-type"><a href="TenderType.html" title="enum class in com.bilt.pos.session">TenderType</a></span>&nbsp;<span class="element-name">BILT_REWARDS</span></div>
+<div class="block">Bilt rewards the terminal spent inside a payment (implicit loyalty), reversed or refunded on
+ the terminal by the payment's POI reference. It is not a card payment: a payment the terminal
+ reported with <code>biltRewardsAmount</code> lists its rewards part under this tender, and its card
+ part, if any, under <a href="#CARD"><code>CARD</code></a>.</div>
 </section>
 </li>
 <li>

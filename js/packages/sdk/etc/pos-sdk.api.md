@@ -13,6 +13,8 @@ import { BasketItem } from '@biltorg/pos-protocol';
 import { BasketItemType } from '@biltorg/pos-protocol';
 import { BasketLineItem } from '@biltorg/pos-protocol';
 import type { BasketMutation } from '@biltorg/pos-protocol';
+import { BiltRewardsPaymentRecord } from '@biltorg/pos-protocol';
+import { BiltRewardsPaymentResult } from '@biltorg/pos-protocol';
 import { CardAcquisitionOptions } from '@biltorg/pos-protocol';
 import { CardAcquisitionResult } from '@biltorg/pos-protocol';
 import { CardPaymentRecord } from '@biltorg/pos-protocol';
@@ -203,6 +205,10 @@ export interface BiltPosStatic {
     // (undocumented)
     connect(engine: EngineFactory): Promise<BiltPos>;
 }
+
+export { BiltRewardsPaymentRecord }
+
+export { BiltRewardsPaymentResult }
 
 export { CardAcquisitionOptions }
 

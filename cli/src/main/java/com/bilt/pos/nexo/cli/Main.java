@@ -1060,6 +1060,9 @@ public final class Main {
                             + result.getCardAmountCharged()
                             + " "
                             + currency
+                            + (result.getBiltRewardsAmount().signum() > 0
+                                ? ", Bilt rewards " + result.getBiltRewardsAmount() + " " + currency
+                                : "")
                             + ", approval "
                             + result.getApprovalCode()
                             + ", POI txn "

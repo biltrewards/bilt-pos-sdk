@@ -284,10 +284,11 @@ public interface TerminalShopperSession extends ShopperSession {
    * one ran — best-effort by default (override via {@link ReversalFlow#onError}).
    *
    * <p>Linked refunds reference the payment's card payments: one {@code PaymentRequest(Refund)} per
-   * card payment, newest first, each for its full amount. After a split tender the stored value leg
-   * is not refunded — use {@code voidTransaction()} to reverse both legs, or the stored value
-   * operations to return funds to the gift card. A refund reverses the card payments and award
-   * only; the sale's committed rebate and redemption movements are reversed by {@link
+   * card payment, newest first, each for its full amount, then one per Bilt rewards payment, which
+   * returns the rewards ({@link RefundResult#getBiltRewardsRefunds()}). After a split tender the
+   * stored value leg is not refunded — use {@code voidTransaction()} to reverse both legs, or the
+   * stored value operations to return funds to the gift card. A refund reverses the card payments
+   * and award only; the sale's committed rebate and redemption movements are reversed by {@link
    * #voidTransaction()}. If a refund stops after some card payments were refunded, a retried {@code
    * refund()} sends only the ones still standing; once every card payment was refunded in full,
    * another {@code refund()} is refused. The {@link RefundResult}'s amount sums every card refund
@@ -306,8 +307,8 @@ public interface TerminalShopperSession extends ShopperSession {
    * one ran (best-effort by default).
    *
    * <p>Refused with {@link SessionErrorCode#INVALID_STATE} when the payment made several card
-   * payments, since the amount does not say which one to return to: ring return lines into a {@link
-   * #settle(SettlementOptions)} with a {@link
+   * payments, or card and Bilt rewards payments, since the amount does not say which one to return
+   * to: ring return lines into a {@link #settle(SettlementOptions)} with a {@link
    * com.bilt.pos.session.settlement.RefundAllocation#card(BigDecimal, String, java.time.Instant)}
    * per card payment instead, or refund every one in full with {@link #refund()}.
    */
@@ -320,12 +321,13 @@ public interface TerminalShopperSession extends ShopperSession {
 
   /**
    * Reverses this session's completed payment: every movement it committed — each card payment,
-   * newest first, and the stored value leg (Nexo {@code ReversalRequest}), then the redemption,
-   * rebate, and award (their {@code LoyaltyRequest} refund types) — in that order. With several
-   * card payments, the {@link VoidResult}'s amount sums every leg it reversed and its reference and
-   * receipts describe the first reversal sent. A checkout fully covered by rewards has no money
-   * leg; voiding it refunds the loyalty movements alone. To void a sale taken by an earlier
-   * session, use {@link #voidTransaction(OriginalSaleRecord)}.
+   * newest first, each Bilt rewards payment ({@link VoidResult#getBiltRewardsReversals()}), and the
+   * stored value leg (Nexo {@code ReversalRequest}), then the redemption, rebate, and award (their
+   * {@code LoyaltyRequest} refund types) — in that order. With several card payments, the {@link
+   * VoidResult}'s amount sums every leg it reversed and its reference and receipts describe the
+   * first reversal sent. A checkout fully covered by rewards has no money leg; voiding it refunds
+   * the loyalty movements alone. To void a sale taken by an earlier session, use {@link
+   * #voidTransaction(OriginalSaleRecord)}.
    *
    * <p>When a step fails, the flow's {@link ReversalFlow#onError onError} handler decides between
    * retry, skip, and abort — see {@link ReversalFlow} for the default policy. A retried void
@@ -348,13 +350,14 @@ public interface TerminalShopperSession extends ShopperSession {
   /**
    * Voids a prior sale by its persisted original-sale record. This is a whole-transaction void:
    * every referenced card payment ({@link OriginalSaleRecord#getCardPayments()}, newest first),
-   * stored value, rebate, redemption, and award movement is reversed in the same order as a
-   * same-session void. If the void partially fails, retry it on the same session instance because
-   * the in-memory reversed-movement progress is what prevents already-reversed legs from being sent
-   * again; {@link #end()} is refused until that retry succeeds. Mixed sale/return settlements
-   * should use {@link #settle(SettlementOptions)} with refund allocations instead. A record
-   * containing any movement of this session's most recent settlement is refused; use parameterless
-   * {@link #voidTransaction()} so the settlement's shared refund/void guards remain authoritative.
+   * Bilt rewards payment ({@link OriginalSaleRecord#getBiltRewardsPayments()}), stored value,
+   * rebate, redemption, and award movement is reversed in the same order as a same-session void. If
+   * the void partially fails, retry it on the same session instance because the in-memory
+   * reversed-movement progress is what prevents already-reversed legs from being sent again; {@link
+   * #end()} is refused until that retry succeeds. Mixed sale/return settlements should use {@link
+   * #settle(SettlementOptions)} with refund allocations instead. A record containing any movement
+   * of this session's most recent settlement is refused; use parameterless {@link
+   * #voidTransaction()} so the settlement's shared refund/void guards remain authoritative.
    */
   ReversalFlow<VoidResult> voidTransaction(OriginalSaleRecord originalSale);
 

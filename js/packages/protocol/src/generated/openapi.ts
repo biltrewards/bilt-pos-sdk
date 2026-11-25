@@ -999,7 +999,7 @@ export interface components {
         /**
          * @description An immutable snapshot of the session's basket. The payment breakdown totals
          *     (`rebateTotal`, `pointDiscountTotal`, `storedValueTotal`, `cardPaymentTotal`,
-         *     `externalPaymentTotal`) are zero while the cart is being built and populated on the
+         *     `biltRewardsTotal`, `externalPaymentTotal`) are zero while the cart is being built and populated on the
          *     snapshots produced during and after settlement.
          */
         Basket: {
@@ -1017,7 +1017,10 @@ export interface components {
             rebateTotal: components["schemas"]["Money"];
             pointDiscountTotal: components["schemas"]["Money"];
             storedValueTotal: components["schemas"]["Money"];
+            /** @description Amount charged to payment cards; Bilt rewards spent inside a card payment are `biltRewardsTotal`. */
             cardPaymentTotal: components["schemas"]["Money"];
+            /** @description Value of the Bilt rewards the terminal spent inside the payments (implicit loyalty); explicitly redeemed points are `pointDiscountTotal`. */
+            biltRewardsTotal: components["schemas"]["Money"];
             externalPaymentTotal: components["schemas"]["Money"];
             /** Format: date-time */
             updatedAt: string;
@@ -1464,17 +1467,28 @@ export interface components {
          *     single-payment fields (`poiTransactionId`, `approvalCode`, `customerReceipt` and the like)
          *     describe the first one; where its response lacks a value they keep the stored value
          *     payment's, and a gift-card-only sale reports its stored value payment there.
+         *
+         *     Bilt rewards the terminal spent inside a payment are not card money: a payment they paid in
+         *     full is in `biltRewardsPayments`, never in `cardPayments`, and the rewards part of a card
+         *     payment is its `biltRewardsAmount`. `biltRewardsAmount` totals both and `cardAmountCharged`
+         *     leaves them out. A sale with no card payment reports its first rewards payment in the
+         *     single-payment fields.
          */
         SettlementResult: {
             success: boolean;
             finalBasket: components["schemas"]["Basket"];
+            /** @description What the terminal authorized for stored value and card payments, Bilt rewards spent inside them included. */
             authorizedAmount: components["schemas"]["Money"];
             storedValueAmountUsed: components["schemas"]["Money"];
             storedValueLoadedAmount: components["schemas"]["Money"];
-            /** @description The sum of `cardPayments`. */
+            /** @description The card money of `cardPayments`, the sum of their `cardAmount`; Bilt rewards are not part of it. */
             cardAmountCharged: components["schemas"]["Money"];
-            /** @description Every card payment the settlement made and kept, in order; empty when no card was charged. */
+            /** @description Every card payment the settlement made and kept, in order; empty when no card was charged. Bilt rewards payments are not listed. */
             cardPayments: components["schemas"]["CardPaymentResult"][];
+            /** @description Value of the Bilt rewards the terminal spent in this settlement's payments, `biltRewardsPayments` and the rewards parts of `cardPayments`; zero when none. */
+            biltRewardsAmount: components["schemas"]["Money"];
+            /** @description Every payment the terminal paid entirely with Bilt rewards, in order; empty when none. */
+            biltRewardsPayments: components["schemas"]["BiltRewardsPaymentResult"][];
             externalPaymentAmount: components["schemas"]["Money"];
             /** @description The first card payment's. */
             approvalCode?: string;
@@ -1508,7 +1522,10 @@ export interface components {
             redemptionPoiTransactionId?: string;
             /** Format: date-time */
             redemptionPoiTransactionTimestamp?: string;
+            /** @description Total returned to payment cards; Bilt rewards a refund returned are `biltRewardsRefundedAmount`. */
             cardRefundedAmount: components["schemas"]["Money"];
+            /** @description Total of Bilt rewards returned during this settlement (`BILT_REWARDS` allocations and the rewards part a card refund reported). */
+            biltRewardsRefundedAmount: components["schemas"]["Money"];
             storedValueRefundedAmount: components["schemas"]["Money"];
             externalRefundedAmount: components["schemas"]["Money"];
             loyaltyRefundedAmount: components["schemas"]["Money"];
@@ -1552,6 +1569,14 @@ export interface components {
             pointBalance?: number;
             externalTenderType?: string;
             externalReference?: string;
+            /**
+             * @description The part of `amount` that was Bilt rewards, not card money; absent when none was. A
+             *     `CARD_CHARGE` movement carries it when the terminal paid part or all of the payment with
+             *     Bilt rewards (equal to `amount` for a Bilt rewards payment, with no card in it); a
+             *     `CARD_REFUND` movement for a `BILT_REWARDS` allocation, or the rewards part a card refund
+             *     reported returning.
+             */
+            biltRewardsAmount?: components["schemas"]["Money"];
             /** @description The Nexo `ServiceID` of the terminal request that committed the movement, as the step's `BEFORE_STEP` context reported it; absent for movements settled outside the terminal (external payments and refunds). */
             serviceId?: string;
         };
@@ -1630,9 +1655,14 @@ export interface components {
          *     in the order they were made, and when it is non-empty it takes precedence over
          *     `cardPoiTransactionId` and `cardPoiTransactionTimestamp`. Those single-card fields, kept for
          *     compatibility, are read when `cardPayments` is absent or empty and stand for one card payment.
+         *     Payments the terminal paid entirely with Bilt rewards are not card payments: they are in
+         *     `biltRewardsPayments`, and a card reference equal to one of theirs is read as that rewards
+         *     payment only.
          */
         OriginalSaleRecord: {
             cardPayments?: components["schemas"]["CardPaymentRecord"][];
+            /** @description The sale's Bilt rewards payments in the order they were made; a void reverses each after the card payments. */
+            biltRewardsPayments?: components["schemas"]["BiltRewardsPaymentRecord"][];
             /** @description The first card payment's reference. Ignored when `cardPayments` is non-empty. */
             cardPoiTransactionId?: string;
             /**
@@ -1667,6 +1697,8 @@ export interface components {
             refundedAmount?: components["schemas"]["Money"];
             /** @description Every card payment this call refunded, in the order sent (newest first). Every entry's `tenderType` is `CARD`. */
             cardRefunds: components["schemas"]["TenderMovement"][];
+            /** @description Every Bilt rewards payment this call refunded, in the order sent, after the card payments. Every entry's `tenderType` is `BILT_REWARDS`. */
+            biltRewardsRefunds: components["schemas"]["TenderMovement"][];
             /** @description The amount each tender leg returned, in the order sent; the entries sum to `refundedAmount`. */
             refundedAmountByTender: components["schemas"]["TenderAmount"][];
             approvalCode?: string;
@@ -1696,6 +1728,8 @@ export interface components {
             reversedAmount?: components["schemas"]["Money"];
             /** @description Every card payment this call reversed, in the order sent (newest first). Every entry's `tenderType` is `CARD`. */
             cardReversals: components["schemas"]["TenderMovement"][];
+            /** @description Every Bilt rewards payment (a payment the terminal paid entirely with Bilt rewards) this call reversed, in the order sent, after the card payments. Every entry's `tenderType` is `BILT_REWARDS`. */
+            biltRewardsReversals: components["schemas"]["TenderMovement"][];
             /** @description The stored value (gift card) payment this call reversed, with its receipts; absent when it reversed none. A sale has at most one. */
             storedValueReversal?: components["schemas"]["TenderMovement"];
             /** @description The amount each money tender leg returned, in the order sent. Loyalty reversals are not listed. */
@@ -1722,7 +1756,7 @@ export interface components {
          *     has at most `CARD` (the tender refund) and `AWARD`.
          * @enum {string}
          */
-        ReversalStep: "STORED_VALUE_LOAD" | "CARD" | "STORED_VALUE" | "REDEMPTION" | "REBATE" | "AWARD";
+        ReversalStep: "STORED_VALUE_LOAD" | "CARD" | "BILT_REWARDS" | "STORED_VALUE" | "REDEMPTION" | "REBATE" | "AWARD";
         /** @description By default the referenced request is assumed to be a payment and no receipt data is requested. */
         TransactionStatusOptions: {
             /** @default PAYMENT */
@@ -1781,7 +1815,7 @@ export interface components {
          *     | `ReversalFlow.beforeStep` (`refund`, `voidTransaction`, retries of `refundUnlinked`) | `BEFORE_STEP` | none | none; the leg is sent |
          *     | `onRebatesRedeemed`, `onPointsRedeemed`, `onGiftCardPayment` | `TOTAL_REQUIRED` | `total` | `suggestedTotal`: the previous total minus the step's amount |
          *     | `SettlementFlow.onError` | `RECOVERY_REQUIRED` | `recovery` | `ABORT` |
-         *     | `SettlementFlow.onPartialCardApproval` | `PARTIAL_CARD_APPROVAL` | `partialApprovalDecision` | `ABORT`; a request that does not declare the kind never raises the step, and the SDK charges the shortfall on another card by itself (3 card requests in total) |
+         *     | `SettlementFlow.onPartialCardApproval` | `PARTIAL_CARD_APPROVAL` | `partialApprovalDecision` | `ABORT`; a request that does not declare the kind never raises the step, and the SDK charges the shortfall on another card by itself (3 card requests in total, a Bilt rewards partial counting as one) |
          *     | `ReversalFlow.onError` | `REVERSAL_DECISION_REQUIRED` | `decision` | the Java default policy: `ABORT` for a money step or a loyalty movement that is the substance of the reversal, `SKIP` for a loyalty movement riding along with a money step; `default.decision` says which |
          *
          *     `onMovement` and the per-movement callbacks, `onCardCharged` and `onAwarded` are
@@ -2093,8 +2127,12 @@ export interface components {
         };
         /** @description One card payment a settlement made. Each reference is absent when the terminal did not report it. */
         CardPaymentResult: {
-            /** @description What the terminal authorized for this payment, cashback included. */
+            /** @description What the terminal authorized for this payment, cashback included, and Bilt rewards included when they paid part of it. */
             amount: components["schemas"]["Money"];
+            /** @description The part of `amount` the terminal paid with Bilt rewards (`biltRewardsAmount` in its response); zero when the card paid it all. */
+            biltRewardsAmount: components["schemas"]["Money"];
+            /** @description The part of `amount` the card paid, `amount - biltRewardsAmount`. */
+            cardAmount: components["schemas"]["Money"];
             /** @description Terminal reference of this payment, for void and refund. */
             poiTransactionId?: string;
             /** Format: date-time */
@@ -2109,9 +2147,25 @@ export interface components {
             partialApproval: boolean;
         };
         /**
+         * @description One payment a settlement made entirely with Bilt rewards (implicit loyalty, `biltRewardsAmount`
+         *     equal to the authorized amount): with multi-tender on the terminal, the points leg of a sale,
+         *     answered as a partial approval before the card payments collect the rest. It is not a card
+         *     payment. A void or refund returns the rewards by its POI reference.
+         */
+        BiltRewardsPaymentResult: {
+            /** @description The value of the rewards spent, in the payment's currency. */
+            amount: components["schemas"]["Money"];
+            /** @description Terminal reference of this payment, for void and refund. */
+            poiTransactionId?: string;
+            /** Format: date-time */
+            poiTransactionTimestamp?: string;
+        };
+        /**
          * @description What `onPartialCardApproval` sees, mirroring `PartialCardApproval`: a card payment the
          *     terminal approved for less than it requested. By then the payment's movement has been
-         *     published. The `PARTIAL_CARD_APPROVAL` step carries these fields.
+         *     published. The `PARTIAL_CARD_APPROVAL` step carries these fields. With implicit loyalty and
+         *     multi-tender on the terminal, the partial payment can be the terminal's Bilt rewards leg, with
+         *     no card in it: `biltRewardsPayment` is then present.
          */
         PartialCardApproval: {
             /** @description What the terminal authorized for this card payment. */
@@ -2125,8 +2179,12 @@ export interface components {
              *     payments still to come. An `EXTERNAL` decision must pay exactly this amount.
              */
             amountDue: components["schemas"]["Money"];
-            /** @description The card payments committed so far, in order, this partial one last. Count them to cap how many cards a sale takes. */
+            /** @description The card payments committed so far, in order, this partial one last unless it was a Bilt rewards payment (those are not card payments). Count them to cap how many cards a sale takes. */
             cardPayments: components["schemas"]["CardPaymentResult"][];
+            /** @description The part of `approved` the terminal paid with Bilt rewards; zero when it was all card. */
+            biltRewardsAmount: components["schemas"]["Money"];
+            /** @description This partial payment when Bilt rewards paid all of it; absent for a card. */
+            biltRewardsPayment?: components["schemas"]["BiltRewardsPaymentResult"];
             /** @description The `CARD_CHARGE` movement of this partial card payment. */
             movement: components["schemas"]["SettlementMovement"];
         };
@@ -2408,12 +2466,13 @@ export interface components {
             display?: components["schemas"]["DisplayText"];
         };
         /** @enum {string} */
-        RefundAllocationType: "CARD" | "STORED_VALUE" | "STORE_CREDIT" | "EXTERNAL" | "POINT_REDEMPTION" | "REBATE" | "AWARD";
+        RefundAllocationType: "CARD" | "BILT_REWARDS" | "STORED_VALUE" | "STORE_CREDIT" | "EXTERNAL" | "POINT_REDEMPTION" | "REBATE" | "AWARD";
         /**
          * @description A register-selected refund or restoration movement for a settlement with returns; one per
          *     movement the register wants recorded or executed. `CARD` without an original reference is
-         *     an unlinked card refund. `STORED_VALUE`, `POINT_REDEMPTION`, `REBATE` and `AWARD` require
-         *     `originalPoiTransactionId`; the loyalty types also `memberId`; `STORE_CREDIT` requires
+         *     an unlinked card refund. `BILT_REWARDS` refunds a Bilt rewards payment of the original sale
+         *     (the same terminal refund as a linked `CARD` one, reported as rewards). `BILT_REWARDS`,
+         *     `STORED_VALUE`, `POINT_REDEMPTION`, `REBATE` and `AWARD` require `originalPoiTransactionId`; the loyalty types also `memberId`; `STORE_CREDIT` requires
          *     `storedValueCard`. `amount` is positive except for `AWARD`, which is bookkeeping and uses
          *     zero. `EXTERNAL` counts toward the return total but sends no terminal movement.
          */
@@ -2456,11 +2515,14 @@ export interface components {
             type: "settle";
         };
         /**
-         * @description The money tender a reversal or refund returned funds to. Loyalty movements are not tenders. Voids and session refunds never return to `EXTERNAL`.
+         * @description The money tender a reversal or refund returned funds to. Loyalty movements are not tenders.
+         *     Voids and session refunds never return to `EXTERNAL`. `BILT_REWARDS` is Bilt rewards the
+         *     terminal spent inside a payment (implicit loyalty, reported as `biltRewardsAmount`): a payment
+         *     rewards paid in full, or the rewards part of a card payment.
          * @enum {string}
          */
-        TenderType: "CARD" | "STORED_VALUE" | "EXTERNAL";
-        /** @description One tender leg (a card payment or a stored value payment) a void reversed or a refund returned, with the terminal's own reference and receipts for it. */
+        TenderType: "CARD" | "BILT_REWARDS" | "STORED_VALUE" | "EXTERNAL";
+        /** @description One tender leg (a card payment, a Bilt rewards payment or a stored value payment) a void reversed or a refund returned, with the terminal's own reference and receipts for it. */
         TenderMovement: {
             tenderType: components["schemas"]["TenderType"];
             /** @description The payment's POI transaction this reversed or refunded; absent for an unlinked refund. */
@@ -2471,6 +2533,8 @@ export interface components {
             poiTransactionId?: string;
             /** Format: date-time */
             poiTransactionTimestamp?: string;
+            /** @description The part of `amount` that went back to Bilt rewards (the whole amount of a `BILT_REWARDS` leg, the rewards part of a card payment rewards paid part of); absent when none did or it is not known. */
+            biltRewardsAmount?: components["schemas"]["Money"];
             /** @description A refund's approval code; absent for a reversal. */
             approvalCode?: string;
             /** @description The Nexo `ServiceID` the reversal or refund request was sent with. */
@@ -2478,7 +2542,7 @@ export interface components {
             customerReceipt?: components["schemas"]["Receipt"];
             merchantReceipt?: components["schemas"]["Receipt"];
         };
-        /** @description The amount one tender leg of a void or refund returned. Each card payment is its own entry. */
+        /** @description The amount one tender leg of a void or refund returned. Each card payment is its own entry; a card payment Bilt rewards paid part of has a `CARD` entry for its card part and a `BILT_REWARDS` entry for its rewards part, both with its reference. */
         TenderAmount: {
             tender: components["schemas"]["TenderType"];
             /** @description The original POI transaction reversed or refunded; absent for an external tender or an unlinked refund. */
@@ -2762,7 +2826,8 @@ export interface components {
          *     `options.cardPayments` splits the card amount into several card payments. A card payment
          *     the terminal approves for less than it requested asks the register through a
          *     `PARTIAL_CARD_APPROVAL` step when declared; otherwise the SDK charges the shortfall on
-         *     another card by itself, up to 3 card requests in total.
+         *     another card by itself, up to 3 card requests in total (a Bilt rewards partial, the
+         *     terminal's points leg, counts as one).
          */
         SettleRequest: {
             /**
@@ -2818,6 +2883,16 @@ export interface components {
             /** Format: date-time */
             poiTransactionTimestamp?: string;
             /** @description What the payment authorized; absent when only its reference was kept. */
+            amount?: components["schemas"]["Money"];
+            /** @description The part of `amount` Bilt rewards paid; absent when the card paid it all or it was not recorded. */
+            biltRewardsAmount?: components["schemas"]["Money"];
+        };
+        /** @description Persistable reference for voiding or refunding one Bilt rewards payment of an original sale (a payment the terminal paid entirely with Bilt rewards). */
+        BiltRewardsPaymentRecord: {
+            poiTransactionId: string;
+            /** Format: date-time */
+            poiTransactionTimestamp?: string;
+            /** @description The value of the rewards the payment spent; absent when it was not recorded. */
             amount?: components["schemas"]["Money"];
         };
         /** @description Persistable reference for reversing one fulfilled stored value basket line. */

@@ -4,7 +4,7 @@ ReversalStep:
     One reversible leg of a sale. A void reverses the known legs in this order:
     `STORED_VALUE_LOAD`, `CARD`, `STORED_VALUE`, `REDEMPTION`, `REBATE`, `AWARD`. A refund flow
     has at most `CARD` (the tender refund) and `AWARD`.
-  enum: [STORED_VALUE_LOAD, CARD, STORED_VALUE, REDEMPTION, REBATE, AWARD]
+  enum: [STORED_VALUE_LOAD, CARD, BILT_REWARDS, STORED_VALUE, REDEMPTION, REBATE, AWARD]
 
 ReversalDecision:
   type: string
@@ -41,12 +41,16 @@ ReversedMovement:
 
 TenderType:
   type: string
-  description: The money tender a reversal or refund returned funds to. Loyalty movements are not tenders. Voids and session refunds never return to `EXTERNAL`.
-  enum: [CARD, STORED_VALUE, EXTERNAL]
+  description: |
+    The money tender a reversal or refund returned funds to. Loyalty movements are not tenders.
+    Voids and session refunds never return to `EXTERNAL`. `BILT_REWARDS` is Bilt rewards the
+    terminal spent inside a payment (implicit loyalty, reported as `biltRewardsAmount`): a payment
+    rewards paid in full, or the rewards part of a card payment.
+  enum: [CARD, BILT_REWARDS, STORED_VALUE, EXTERNAL]
 
 TenderAmount:
   type: object
-  description: The amount one tender leg of a void or refund returned. Each card payment is its own entry.
+  description: The amount one tender leg of a void or refund returned. Each card payment is its own entry; a card payment Bilt rewards paid part of has a `CARD` entry for its card part and a `BILT_REWARDS` entry for its rewards part, both with its reference.
   required: [tender]
   properties:
     tender:
@@ -60,7 +64,7 @@ TenderAmount:
 
 TenderMovement:
   type: object
-  description: One tender leg (a card payment or a stored value payment) a void reversed or a refund returned, with the terminal's own reference and receipts for it.
+  description: One tender leg (a card payment, a Bilt rewards payment or a stored value payment) a void reversed or a refund returned, with the terminal's own reference and receipts for it.
   required: [tenderType]
   properties:
     tenderType:
@@ -77,6 +81,9 @@ TenderMovement:
     poiTransactionTimestamp:
       type: string
       format: date-time
+    biltRewardsAmount:
+      description: The part of `amount` that went back to Bilt rewards (the whole amount of a `BILT_REWARDS` leg, the rewards part of a card payment rewards paid part of); absent when none did or it is not known.
+      $ref: './common.yaml#/Money'
     approvalCode:
       type: string
       description: A refund's approval code; absent for a reversal.
@@ -95,7 +102,7 @@ RefundResult:
     transaction, best-effort. A refund of a sale with several card payments sends one refund per
     card payment: `cardRefunds` lists each with its receipts, and `refundedAmountByTender` breaks
     `refundedAmount` down. The single-value fields describe the first refund sent.
-  required: [success, cardRefunds, refundedAmountByTender, pointsReversed, remainingPointBalance]
+  required: [success, cardRefunds, biltRewardsRefunds, refundedAmountByTender, pointsReversed, remainingPointBalance]
   properties:
     success:
       type: boolean
@@ -105,6 +112,11 @@ RefundResult:
     cardRefunds:
       type: array
       description: Every card payment this call refunded, in the order sent (newest first). Every entry's `tenderType` is `CARD`.
+      items:
+        $ref: '#/TenderMovement'
+    biltRewardsRefunds:
+      type: array
+      description: Every Bilt rewards payment this call refunded, in the order sent, after the card payments. Every entry's `tenderType` is `BILT_REWARDS`.
       items:
         $ref: '#/TenderMovement'
     refundedAmountByTender:
@@ -137,7 +149,7 @@ VoidResult:
     receipts cover only the legs sent this time and may all be absent. `cardReversals` lists each
     card payment reversed with its receipts, and `reversedAmountByTender` breaks the money tender
     legs down; the single-value fields describe the first leg sent (the newest card payment).
-  required: [success, cardReversals, reversedAmountByTender, pointsReversed, remainingPointBalance]
+  required: [success, cardReversals, biltRewardsReversals, reversedAmountByTender, pointsReversed, remainingPointBalance]
   properties:
     success:
       type: boolean
@@ -150,6 +162,11 @@ VoidResult:
     cardReversals:
       type: array
       description: Every card payment this call reversed, in the order sent (newest first). Every entry's `tenderType` is `CARD`.
+      items:
+        $ref: '#/TenderMovement'
+    biltRewardsReversals:
+      type: array
+      description: Every Bilt rewards payment (a payment the terminal paid entirely with Bilt rewards) this call reversed, in the order sent, after the card payments. Every entry's `tenderType` is `BILT_REWARDS`.
       items:
         $ref: '#/TenderMovement'
     storedValueReversal:

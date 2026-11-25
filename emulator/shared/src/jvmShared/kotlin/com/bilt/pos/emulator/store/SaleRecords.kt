@@ -28,10 +28,29 @@ fun SettlementResult.toSaleRecord(
     // the copy as a CARD leg would record the same transaction twice.
     val storedValueIsPrimary =
         poiTransactionId != null && poiTransactionId == storedValuePoiTransactionId
+    // likewise a rewards-only checkout reports its first rewards payment in the single-payment
+    // getters; mapping the copy as a CARD leg would record the same payment as a card
+    val biltRewardsIsPrimary =
+        poiTransactionId != null &&
+            biltRewardsPayments.any { it.poiTransactionId == poiTransactionId }
     val legs = buildList {
         fun loyaltyLeg(type: LegType, id: String?, timestamp: Instant?, amount: BigDecimal?) {
             if (id != null) {
                 add(TransactionLeg(type, id, timestamp?.toString(), amount?.toPlainString()))
+            }
+        }
+        // a payment Bilt rewards paid in full is its own leg, never a card: the rewards come back
+        // by its reference. It is the first payment of a sale the rewards started
+        biltRewardsPayments.forEach { payment ->
+            payment.poiTransactionId?.let {
+                add(
+                    TransactionLeg(
+                        type = LegType.BILT_REWARDS,
+                        poiTransactionId = it,
+                        poiTimestamp = payment.poiTransactionTimestamp?.toString(),
+                        amount = payment.amount.toPlainString(),
+                    )
+                )
             }
         }
         // every card payment of the sale is its own leg: a split sale holds several,
@@ -49,11 +68,13 @@ fun SettlementResult.toSaleRecord(
                         brand = payment.paymentBrand,
                         maskedPan = payment.maskedPan,
                         partial = payment.isPartialApproval,
+                        biltRewardsAmount =
+                            payment.biltRewardsAmount?.takeIf { it.signum() > 0 }?.toPlainString(),
                     )
                 )
             }
         }
-        if (cardPayments.isEmpty() && !storedValueIsPrimary) {
+        if (cardPayments.isEmpty() && !storedValueIsPrimary && !biltRewardsIsPrimary) {
             poiTransactionId?.let {
                 add(
                     TransactionLeg(

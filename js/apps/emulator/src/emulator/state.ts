@@ -45,11 +45,14 @@ export interface CardPaymentUi {
   readonly poiTransactionId?: string;
   /** True when the terminal approved less than this payment asked for. */
   readonly partial: boolean;
+  /** The part of `amount` Bilt rewards paid; absent when the card paid it all. */
+  readonly biltRewardsAmount?: Money;
 }
 
 /**
  * One line per card payment, `Card 1 $60.00 · Visa ····1111 · approval APPR-1 · partial`: the
- * outcome popup, the event log and the Refund tab all word a card payment this way.
+ * outcome popup, the event log and the Refund tab all word a card payment this way. A card
+ * payment Bilt rewards paid part of says so (`incl. Bilt Rewards $5.00`); `amount` is the whole.
  */
 export function cardLine(
   index: number,
@@ -59,6 +62,7 @@ export function cardLine(
     readonly lastDigits?: string | undefined;
     readonly approvalCode?: string | undefined;
     readonly partial: boolean;
+    readonly biltRewardsAmount?: Money | undefined;
   },
 ): string {
   return [
@@ -66,9 +70,18 @@ export function cardLine(
     [card.brand, card.lastDigits ? `····${card.lastDigits}` : null].filter(Boolean).join(' '),
     card.approvalCode ? `approval ${card.approvalCode}` : null,
     card.partial ? 'partial' : null,
+    card.biltRewardsAmount === undefined ? null : `incl. Bilt Rewards $${card.biltRewardsAmount}`,
   ]
     .filter(Boolean)
     .join(' · ');
+}
+
+/**
+ * The line of a payment Bilt rewards paid in full, `Bilt Rewards $7.16`: never worded as a card.
+ * The outcome popup, the event log and the Refund tab all use it.
+ */
+export function biltRewardsLine(payment: { readonly amount?: Money | undefined }): string {
+  return `Bilt Rewards${payment.amount === undefined ? '' : ` $${payment.amount}`}`;
 }
 
 /**
@@ -82,9 +95,35 @@ export interface PartialApprovalPrompt {
   readonly shortfall: Money;
   /** Everything the card phase still owes: the shortfall plus the card payments still to come. */
   readonly amountDue: Money;
+  /** Set when Bilt rewards paid the whole approved amount (the points leg): no card was used. */
+  readonly biltRewardsPaid: Money | null;
+  /** The part of a card's approved amount Bilt rewards paid; `null` when none or the leg was rewards only. */
+  readonly biltRewardsIncluded: Money | null;
   readonly plannedLeft: boolean;
   readonly actions: readonly PartialApprovalAction[];
   choose(action: PartialApprovalAction): void;
+}
+
+/**
+ * What the partial-approval dialog and the log say was approved: `Card approved $60.00 of
+ * $100.00, $40.00 still due`, or `Bilt Rewards paid $60.00 of $100.00, …` when the terminal's
+ * points leg was the partial payment, never a card.
+ */
+export function partialApprovalHeadline(
+  prompt: Pick<
+    PartialApprovalPrompt,
+    'approved' | 'requested' | 'amountDue' | 'biltRewardsPaid' | 'biltRewardsIncluded'
+  >,
+): string {
+  const approved =
+    prompt.biltRewardsPaid === null
+      ? `Card approved $${prompt.approved}`
+      : `Bilt Rewards paid $${prompt.biltRewardsPaid}`;
+  const included =
+    prompt.biltRewardsIncluded === null
+      ? ''
+      : ` (incl. Bilt Rewards $${prompt.biltRewardsIncluded})`;
+  return `${approved} of $${prompt.requested}${included}, $${prompt.amountDue} still due`;
 }
 
 export function partialApprovalActions(plannedLeft: boolean): readonly PartialApprovalAction[] {
@@ -96,8 +135,12 @@ export function partialApprovalActions(plannedLeft: boolean): readonly PartialAp
 /** The button text and one-line description of a partial-approval choice, from the prompt's amounts. */
 export function partialApprovalChoice(
   action: PartialApprovalAction,
-  prompt: Pick<PartialApprovalPrompt, 'shortfall' | 'amountDue'>,
+  prompt: Pick<
+    PartialApprovalPrompt,
+    'shortfall' | 'amountDue' | 'biltRewardsPaid' | 'biltRewardsIncluded'
+  >,
 ): { readonly label: string; readonly description: string } {
+  const rewards = prompt.biltRewardsPaid !== null || prompt.biltRewardsIncluded !== null;
   switch (action) {
     case 'ANOTHER_CARD':
       return {
@@ -112,12 +155,14 @@ export function partialApprovalChoice(
     case 'EXTERNAL':
       return {
         label: `Rest in cash ($${prompt.amountDue})`,
-        description: `Record $${prompt.amountDue} as cash and keep the card payments. Choose only after collecting it.`,
+        description: `Record $${prompt.amountDue} as cash and keep the ${rewards ? 'Bilt Rewards and card' : 'card'} payments. Choose only after collecting it.`,
       };
     case 'ABORT':
       return {
         label: 'Cancel sale',
-        description: 'Reverse every card payment and stop the sale.',
+        description: rewards
+          ? 'Reverse every Bilt Rewards and card payment and stop the sale.'
+          : 'Reverse every card payment and stop the sale.',
       };
   }
 }
@@ -341,6 +386,21 @@ export interface SaleCardUi {
   readonly lastDigits?: string;
   readonly approvalCode?: string;
   readonly partial: boolean;
+  /** The part of `amount` Bilt rewards paid; absent when the card paid it all. */
+  readonly biltRewardsAmount?: Money;
+  /** True once a full refund or void reversed this payment. */
+  readonly refunded: boolean;
+  /** What the payment can still return, in cents; `null` when unknown. */
+  readonly remainingMinor: number | null;
+}
+
+/**
+ * One payment of a stored sale that Bilt rewards paid in full, as the Refund tab lists it. A
+ * return can restore to it as its own tender, with a `BILT_REWARDS` refund.
+ */
+export interface SaleBiltRewardsUi {
+  readonly poiTransactionId: string;
+  readonly amount?: Money;
   /** True once a full refund or void reversed this payment. */
   readonly refunded: boolean;
   /** What the payment can still return, in cents; `null` when unknown. */
@@ -357,6 +417,8 @@ export interface StoredSaleUi {
   readonly hasGiftCardPurchase: boolean;
   /** Every card payment the sale made, in order. */
   readonly cardPayments: readonly SaleCardUi[];
+  /** Every payment Bilt rewards paid in full, in order; never a card payment. */
+  readonly biltRewardsPayments: readonly SaleBiltRewardsUi[];
   readonly refunded: boolean;
   readonly fullyRefunded: boolean;
   readonly voided: boolean;
@@ -496,11 +558,15 @@ export interface EmulatorController {
   acquireCard(): void;
   refundSale(saleId: string): void;
   /**
-   * Rings the selected lines of a stored sale into the basket as returns. `cardPoiTransactionId`
-   * picks which card payment of a split sale the refund goes back to; the first card payment
-   * still standing when absent.
+   * Rings the selected lines of a stored sale into the basket as returns. `tenderPoiTransactionId`
+   * picks which card payment, or Bilt rewards payment, of the sale the refund goes back to; the
+   * first card payment still standing when absent.
    */
-  addReturnToBasket(saleId: string, skus: ReadonlySet<string>, cardPoiTransactionId?: string): void;
+  addReturnToBasket(
+    saleId: string,
+    skus: ReadonlySet<string>,
+    tenderPoiTransactionId?: string,
+  ): void;
   clearBasket(): void;
   abort(): void;
   dismissPaymentOutcome(): void;

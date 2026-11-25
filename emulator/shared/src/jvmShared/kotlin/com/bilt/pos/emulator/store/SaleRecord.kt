@@ -14,6 +14,12 @@ import kotlinx.serialization.Serializable
  */
 enum class LegType {
     CARD,
+    /**
+     * A payment Bilt rewards (points) paid in full — no card, receipts or acquirer data. The part
+     * of a card payment rewards paid only in part stays on its CARD leg
+     * ([TransactionLeg.biltRewardsAmount]).
+     */
+    BILT_REWARDS,
     STORED_VALUE,
     AWARD,
     REBATE,
@@ -35,6 +41,12 @@ data class TransactionLeg(
     val maskedPan: String? = null,
     /** True when the card approved less than it was asked for. Only card legs set it. */
     val partial: Boolean = false,
+    /**
+     * The part of [amount] Bilt rewards paid, as a plain decimal string; set on a card leg rewards
+     * paid only part of. A void or full refund must present it back, so the terminal returns that
+     * part to the rewards. Unset on a [LegType.BILT_REWARDS] leg, whose whole [amount] is rewards.
+     */
+    val biltRewardsAmount: String? = null,
     /**
      * The rewardRefs the redemption carried; a referenced redemption reversal must replay the same
      * refs. Unset until the SDK exposes them on SettlementResult.
@@ -105,9 +117,13 @@ data class SaleRecord(
 
     fun leg(type: LegType): TransactionLeg? = legs.firstOrNull { it.type == type }
 
-    /** Every card payment of the sale, in payment order. */
+    /** Every card payment of the sale, in payment order; Bilt rewards payments are not cards. */
     val cardLegs: List<TransactionLeg>
         get() = legs.filter { it.type == LegType.CARD }
+
+    /** Every payment Bilt rewards paid in full, in payment order. */
+    val biltRewardsLegs: List<TransactionLeg>
+        get() = legs.filter { it.type == LegType.BILT_REWARDS }
 }
 
 /**
@@ -210,12 +226,15 @@ data class StoredSale(
 
     /**
      * The sale's tender legs — what full refunds must cover. A split tender has a card AND a stored
-     * value leg; refunding only one of them leaves money charged.
+     * value leg, and rewards payments are legs of their own; refunding only one of them leaves
+     * money charged.
      */
     val moneyLegs: List<TransactionLeg>
         get() =
             sale.legs.filter {
-                it.type == LegType.CARD || it.type == LegType.STORED_VALUE
+                it.type == LegType.CARD ||
+                    it.type == LegType.BILT_REWARDS ||
+                    it.type == LegType.STORED_VALUE
             }
 
     /**

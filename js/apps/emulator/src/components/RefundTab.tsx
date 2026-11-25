@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { useController, useEmulatorState } from '../emulator/context';
 import {
+  biltRewardsLine,
   memberLabel,
   refundLabel,
   cardLine,
@@ -10,6 +11,14 @@ import {
 } from '../emulator/state';
 import { formatMinor } from '../money';
 import { LabeledRadio, LineItemRow } from './common';
+
+/** Whether Bilt rewards paid any of the sale, in a payment of their own or inside a card's. */
+function hasBiltRewards(sale: StoredSaleUi): boolean {
+  return (
+    sale.biltRewardsPayments.length > 0 ||
+    sale.cardPayments.some((card) => card.biltRewardsAmount !== undefined)
+  );
+}
 
 function SalesListCard({
   sales,
@@ -40,13 +49,20 @@ function SalesListCard({
                   <span className="small">{sale.completedAtLabel}</span>
                 </span>
                 <span className="small">{saleStatusLabel(sale)}</span>
-                {sale.cardPayments.length > 1
-                  ? sale.cardPayments.map((card, index) => (
+                {sale.cardPayments.length > 1 || hasBiltRewards(sale) ? (
+                  <>
+                    {sale.biltRewardsPayments.map((payment) => (
+                      <span key={payment.poiTransactionId} className="small">
+                        {biltRewardsLine(payment)}
+                      </span>
+                    ))}
+                    {sale.cardPayments.map((card, index) => (
                       <span key={card.poiTransactionId} className="small">
                         {cardLine(index, card)}
                       </span>
-                    ))
-                  : null}
+                    ))}
+                  </>
+                ) : null}
               </button>
             </li>
           ))}
@@ -69,14 +85,22 @@ function RefundDetailsCard({ sale }: { sale: StoredSaleUi }): ReactNode {
   const fullAvailable = sale.fullRefundAvailable;
   const [mode, setMode] = useState<RefundMode>(fullAvailable ? 'FULL' : 'ITEMS');
   const [selectedSkus, setSelectedSkus] = useState<ReadonlySet<string>>(new Set());
-  // A return restores to one card payment: with several still standing, the cashier picks which.
-  // a card drawn down to nothing by earlier returns has no capacity to take another
-  const hasCapacity = (card: StoredSaleUi['cardPayments'][number]) =>
-    !card.refunded && card.remainingMinor !== 0;
-  const standingCards = sale.cardPayments.filter(hasCapacity);
-  const [pickedCard, setPickedCard] = useState<string | null>(null);
-  const cardChoice =
-    standingCards.find((card) => card.poiTransactionId === pickedCard) ?? standingCards[0] ?? null;
+  // A return restores to one payment: with several still standing, the cashier picks which. A
+  // Bilt Rewards payment is a tender of its own, listed beside the cards, never as one.
+  // A payment drawn down to nothing by earlier returns has no capacity to take another.
+  const tenders = [
+    ...sale.cardPayments.map((card, index) => ({ ...card, label: cardLine(index, card) })),
+    ...sale.biltRewardsPayments.map((payment) => ({ ...payment, label: biltRewardsLine(payment) })),
+  ];
+  const hasCapacity = (tender: (typeof tenders)[number]) =>
+    !tender.refunded && tender.remainingMinor !== 0;
+  const standingTenders = tenders.filter(hasCapacity);
+  const [pickedTender, setPickedTender] = useState<string | null>(null);
+  // the default is the first card still standing, else the Bilt Rewards payment
+  const tenderChoice =
+    standingTenders.find((tender) => tender.poiTransactionId === pickedTender) ??
+    standingTenders[0] ??
+    null;
   const hasRecordedItems = sale.items.length > 0;
   const itemsAvailable = hasRecordedItems && !sale.hasGiftCardPurchase;
   const refundable = saleRefundable(sale);
@@ -140,7 +164,21 @@ function RefundDetailsCard({ sale }: { sale: StoredSaleUi }): ReactNode {
           ))}
         </ul>
       ) : null}
-      {mode === 'FULL' && sale.cardPayments.length > 1 ? (
+      {sale.biltRewardsPayments.length > 0 ? (
+        <ul className="small sale-cards" aria-label="Bilt Rewards payments">
+          {sale.biltRewardsPayments.map((payment) => (
+            <li key={payment.poiTransactionId}>
+              {biltRewardsLine(payment)}
+              {payment.refunded ? ' · refunded' : ''}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {mode === 'FULL' && sale.biltRewardsPayments.length > 0 && tenders.length > 1 ? (
+        <p className="small">
+          Reverses all {tenders.length} payments: the card payments newest first, then Bilt Rewards
+        </p>
+      ) : mode === 'FULL' && sale.cardPayments.length > 1 ? (
         <p className="small">Reverses all {sale.cardPayments.length} card payments, newest first</p>
       ) : null}
       <hr />
@@ -210,19 +248,21 @@ function RefundDetailsCard({ sale }: { sale: StoredSaleUi }): ReactNode {
           No line items recorded for this sale — only a full refund is possible
         </p>
       )}
-      {mode === 'ITEMS' && refundable && sale.cardPayments.length > 1 ? (
+      {mode === 'ITEMS' && refundable && tenders.length > 1 ? (
         <fieldset className="card-picker" aria-label="Return to">
           <legend className="small">Return to:</legend>
-          {sale.cardPayments.map((card, index) => (
+          {tenders.map((tender) => (
             <LabeledRadio
-              key={card.poiTransactionId}
-              name={`card-${sale.id}`}
-              label={`${cardLine(index, card)}${
-                card.remainingMinor === null ? '' : ` · up to $${formatMinor(card.remainingMinor)}`
+              key={tender.poiTransactionId}
+              name={`tender-${sale.id}`}
+              label={`${tender.label}${
+                tender.remainingMinor === null
+                  ? ''
+                  : ` · up to $${formatMinor(tender.remainingMinor)}`
               }`}
-              selected={cardChoice?.poiTransactionId === card.poiTransactionId}
-              enabled={refundable && hasCapacity(card)}
-              onClick={() => setPickedCard(card.poiTransactionId)}
+              selected={tenderChoice?.poiTransactionId === tender.poiTransactionId}
+              enabled={refundable && hasCapacity(tender)}
+              onClick={() => setPickedTender(tender.poiTransactionId)}
             />
           ))}
         </fieldset>
@@ -240,7 +280,7 @@ function RefundDetailsCard({ sale }: { sale: StoredSaleUi }): ReactNode {
             controller.addReturnToBasket(
               sale.id,
               selectedSkus,
-              sale.cardPayments.length > 1 ? cardChoice?.poiTransactionId : undefined,
+              tenders.length > 1 ? tenderChoice?.poiTransactionId : undefined,
             );
             setSelectedSkus(new Set());
           }

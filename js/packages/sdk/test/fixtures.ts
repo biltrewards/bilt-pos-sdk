@@ -71,6 +71,7 @@ export function basket(items: readonly BasketLineItem[], cartId = 'cart_1'): Bas
     pointDiscountTotal: '0.00',
     storedValueTotal: '0.00',
     cardPaymentTotal: '0.00',
+    biltRewardsTotal: '0.00',
     externalPaymentTotal: '0.00',
     updatedAt: new Date().toISOString(),
   };
@@ -112,12 +113,16 @@ export function settlementResult(finalBasket: Basket, charged: string): Settleme
     cardPayments: [
       {
         amount: charged,
+        biltRewardsAmount: '0',
+        cardAmount: charged,
         poiTransactionId: 'POI-1',
         approvalCode: 'A1B2C3',
         paymentBrand: 'Visa',
         partialApproval: false,
       },
     ],
+    biltRewardsAmount: '0',
+    biltRewardsPayments: [],
     externalPaymentAmount: '0.00',
     approvalCode: 'A1B2C3',
     paymentBrand: 'Visa',
@@ -131,6 +136,7 @@ export function settlementResult(finalBasket: Basket, charged: string): Settleme
     promotionMessages: [],
     poiTransactionId: 'POI-1',
     cardRefundedAmount: '0.00',
+    biltRewardsRefundedAmount: '0.00',
     storedValueRefundedAmount: '0.00',
     externalRefundedAmount: '0.00',
     loyaltyRefundedAmount: '0.00',

@@ -214,12 +214,30 @@ function pickHandler(step: OperationStep, steps: StepHandlers | undefined): Invo
     case 'PARTIAL_CARD_APPROVAL': {
       const onPartialCardApproval = h.onPartialCardApproval;
       if (!onPartialCardApproval) return undefined;
-      const { approved, requested, shortfall, amountDue, cardPayments, movement } = step;
+      const {
+        approved,
+        requested,
+        shortfall,
+        amountDue,
+        cardPayments,
+        biltRewardsAmount,
+        biltRewardsPayment,
+        movement,
+      } = step;
       return async (info) => ({
         stepId,
         partialApprovalDecision: normalizePartialApprovalDecision(
           await onPartialCardApproval(
-            { approved, requested, shortfall, amountDue, cardPayments, movement },
+            {
+              approved,
+              requested,
+              shortfall,
+              amountDue,
+              cardPayments,
+              biltRewardsAmount,
+              ...(biltRewardsPayment === undefined ? {} : { biltRewardsPayment }),
+              movement,
+            },
             info,
           ),
         ),

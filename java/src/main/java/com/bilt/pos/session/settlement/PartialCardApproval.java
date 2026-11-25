@@ -9,6 +9,7 @@
  */
 package com.bilt.pos.session.settlement;
 
+import com.bilt.pos.session.payment.BiltRewardsPaymentResult;
 import com.bilt.pos.session.payment.CardPaymentResult;
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -21,6 +22,11 @@ import java.util.Objects;
  * with an authorized amount below the amount it requested. By then the payment's movement has been
  * published and {@code onCardCharged} has fired. The handler returns a {@link
  * PartialApprovalDecision} for the shortfall.
+ *
+ * <p>With implicit loyalty and multi-tender on the terminal, the partial payment can be the
+ * terminal's Bilt rewards leg: the member's rewards paid {@link #getApproved()} and no card was in
+ * it. Then {@link #getBiltRewardsPayment()} is that payment and {@link #isBiltRewards()} is {@code
+ * true}; the register should report it to the shopper as rewards, not as a declined card.
  */
 public final class PartialCardApproval {
 
@@ -29,6 +35,8 @@ public final class PartialCardApproval {
   private final BigDecimal amountDue;
   private final List<CardPaymentResult> cardPayments;
   private final SettlementMovement movement;
+  private final BigDecimal biltRewardsAmount;
+  private final BiltRewardsPaymentResult biltRewardsPayment;
 
   private PartialCardApproval(Builder builder) {
     this.approved = Objects.requireNonNull(builder.approved, "approved");
@@ -38,6 +46,9 @@ public final class PartialCardApproval {
         Collections.unmodifiableList(
             new ArrayList<>(Objects.requireNonNull(builder.cardPayments, "cardPayments")));
     this.movement = Objects.requireNonNull(builder.movement, "movement");
+    this.biltRewardsAmount =
+        builder.biltRewardsAmount == null ? BigDecimal.ZERO : builder.biltRewardsAmount;
+    this.biltRewardsPayment = builder.biltRewardsPayment;
   }
 
   public static Builder builder() {
@@ -69,8 +80,9 @@ public final class PartialCardApproval {
   }
 
   /**
-   * The card payments this settlement committed so far, in order, this partial one last. The
-   * handler can count them to limit how many cards a sale takes.
+   * The card payments this settlement committed so far, in order, this partial one last unless it
+   * was a Bilt rewards payment ({@link #isBiltRewards()}): rewards payments are not card payments
+   * and are never listed. The handler can count them to limit how many cards a sale takes.
    */
   public List<CardPaymentResult> getCardPayments() {
     return cardPayments;
@@ -79,6 +91,27 @@ public final class PartialCardApproval {
   /** The {@code CARD_CHARGE} movement of this partial card payment. */
   public SettlementMovement getMovement() {
     return movement;
+  }
+
+  /**
+   * The part of {@link #getApproved()} the terminal paid with Bilt rewards; zero when it was all
+   * card. Equal to {@link #getApproved()} for a Bilt rewards payment.
+   */
+  public BigDecimal getBiltRewardsAmount() {
+    return biltRewardsAmount;
+  }
+
+  /**
+   * This partial payment when Bilt rewards paid all of it (the terminal's points leg, with no card
+   * in it), else {@code null}.
+   */
+  public BiltRewardsPaymentResult getBiltRewardsPayment() {
+    return biltRewardsPayment;
+  }
+
+  /** Whether this partial payment was a Bilt rewards payment rather than a card payment. */
+  public boolean isBiltRewards() {
+    return biltRewardsPayment != null;
   }
 
   @Override
@@ -91,6 +124,7 @@ public final class PartialCardApproval {
         + amountDue
         + ", cardPayments="
         + cardPayments.size()
+        + (isBiltRewards() ? ", biltRewards" : "")
         + ")";
   }
 
@@ -100,6 +134,8 @@ public final class PartialCardApproval {
     private BigDecimal amountDue;
     private List<CardPaymentResult> cardPayments = List.of();
     private SettlementMovement movement;
+    private BigDecimal biltRewardsAmount;
+    private BiltRewardsPaymentResult biltRewardsPayment;
 
     private Builder() {}
 
@@ -125,6 +161,16 @@ public final class PartialCardApproval {
 
     public Builder movement(SettlementMovement movement) {
       this.movement = movement;
+      return this;
+    }
+
+    public Builder biltRewardsAmount(BigDecimal biltRewardsAmount) {
+      this.biltRewardsAmount = biltRewardsAmount;
+      return this;
+    }
+
+    public Builder biltRewardsPayment(BiltRewardsPaymentResult biltRewardsPayment) {
+      this.biltRewardsPayment = biltRewardsPayment;
       return this;
     }
 

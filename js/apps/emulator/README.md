@@ -99,14 +99,24 @@ Abort).
   is left, **Rest in cash**, **Cancel sale**). Off, the SDK charges the shortfall on another card
   by itself, at most 3 card requests in all, and a short approval after that fails the step into
   the recovery dialog. On the simulator, an amount whose cents end in `456` is approved for 60%.
+- **Bilt Rewards**: the terminal can spend Bilt rewards inside a payment (implicit loyalty, the
+  default). The emulator shows that leg as **Bilt Rewards**, never as a card: the outcome popup and
+  the summary line list `Bilt Rewards $X` beside the card payments, with the card total without the
+  rewards; the partial-approval dialog says Bilt Rewards paid when the points leg was the partial
+  payment; the sales list and the Refund tab list a Bilt Rewards payment under the card payments,
+  and **Return to:** offers it as its own tender (a `BILT_REWARDS` refund); a full refund lists
+  what went back to Bilt Rewards. On the simulator, a card payment whose amount in cents ends in
+  `789` (e.g. $17.89) comes back as a rewards-only partial payment for 40% (no card data), and one
+  ending in `321` (e.g. $13.21) is approved in full with 25% in rewards.
 - **Stored Value**: balance inquiry, activation with a zero balance, and a gift-card purchase rung
   into the basket and loaded at settlement. **Read card** fills the card field from a terminal read.
 - **Refund**: completed sales from IndexedDB. **Full amount** voids every standing movement of the
   sale on a fresh session (no checkout open); **Selected items** rings the checked lines, capped at
   what earlier refunds left, into the active checkout as returns, settled against the original card
   (or gift card) leg, with any shortfall of a netted tender paid out by the register. A sale with
-  several card payments lists them, and **Return to:** picks the card a returned item goes back to;
-  the full refund voids every card payment and lists each reversed leg with its own receipt.
+  several card payments, or a Bilt Rewards payment, lists them, and **Return to:** picks the card or
+  Bilt Rewards payment a returned item goes back to; the full refund voids every card payment and
+  every Bilt Rewards payment and lists each reversed leg with its own receipt.
 - **Log**: Events (one line per action and answer), Detailed (with failure causes), Protocol (the
   HTTP requests to the bridge with their bodies, and the session events it streams back).
 
@@ -117,5 +127,5 @@ double with IndexedDB from `fake-indexeddb`, querying by the desktop's labels.
 `pnpm --filter @biltorg/pos-emulator test:contract` drives the real Session Host and the scripted
 terminal of the SDK's contract suite (needs a JDK 21): a sale whose rebate is re-taxed and whose
 declined charge is retried through the recovery decision, the sale persisted, a gift-card tender,
-an item return of the persisted sale from a later session, a split sale and the partial-approval choices. The host's simulated terminal approves a card payment whose cents end in `456` for 60%, and the suite also drives that trigger (it skips while the checkout has none). `BILT_HOST_LOG=/path` keeps the
+an item return of the persisted sale from a later session, a split sale and the partial-approval choices. The host's simulated terminal approves a card payment whose cents end in `456` for 60%, and the suite also drives that trigger (it skips while the checkout has none); the `789` and `321` Bilt Rewards triggers (see above) are driven too. `BILT_HOST_LOG=/path` keeps the
 host's output.

@@ -440,11 +440,10 @@ private fun SalesListCard(
                                     )
                                 }
                                 Text(sale.statusLabel, style = MaterialTheme.typography.labelSmall)
-                                // a split sale lists every card payment under its badge
-                                if (sale.cardPayments.size > 1) {
-                                    sale.cardPayments.forEach {
-                                        Text(it.line, style = MaterialTheme.typography.labelSmall)
-                                    }
+                                // a split sale lists every payment under its badge: Bilt Rewards,
+                                // cards
+                                sale.paymentLines.forEach {
+                                    Text(it, style = MaterialTheme.typography.labelSmall)
                                 }
                             }
                         }
@@ -463,6 +462,17 @@ private fun SalesListCard(
 internal class SplitCardSeed(val amounts: List<String>)
 
 internal val LocalSplitCardSeed = staticCompositionLocalOf<SplitCardSeed?> { null }
+
+/**
+ * A tender payment an item return can go back to: a card payment or a Bilt Rewards payment, with
+ * the line the picker shows for it.
+ */
+private class ReturnTarget(
+    val line: String,
+    val poiTransactionId: String?,
+    val returnable: Boolean,
+    val remainingAmount: String?,
+)
 
 /** What the Refund button returns: everything, or the checked items. */
 private enum class RefundMode {
@@ -488,14 +498,21 @@ private fun RefundDetailsCard(
             mutableStateOf(if (fullAvailable) RefundMode.FULL else RefundMode.ITEMS)
         }
     var selectedSkus by remember(sale.id) { mutableStateOf(emptySet<String>()) }
-    // A sale with several card payments: which one an item return goes back to. Falls back to
-    // the first payment not yet refunded, so a pick that a refresh made stale cannot target a
-    // refunded one.
-    var pickedCard by remember(sale.id) { mutableStateOf<String?>(null) }
-    val splitCards = sale.cardPayments.size > 1
-    val returnCard =
-        sale.cardPayments.firstOrNull { it.poiTransactionId == pickedCard && it.returnable }
-            ?: sale.cardPayments.firstOrNull { it.returnable }
+    // A sale with several tender payments (cards, or Bilt Rewards next to a card): which one an
+    // item return goes back to. Falls back to the first payment not yet refunded, cards before
+    // Bilt Rewards, so a pick that a refresh made stale cannot target a refunded one.
+    var pickedTender by remember(sale.id) { mutableStateOf<String?>(null) }
+    val returnTargets =
+        sale.cardPayments.map {
+            ReturnTarget(it.line, it.poiTransactionId, it.returnable, it.remainingAmount)
+        } +
+            sale.biltRewardsPayments.map {
+                ReturnTarget(it.line, it.poiTransactionId, it.returnable, it.remainingAmount)
+            }
+    val splitTenders = returnTargets.size > 1
+    val returnTarget =
+        returnTargets.firstOrNull { it.poiTransactionId == pickedTender && it.returnable }
+            ?: returnTargets.firstOrNull { it.returnable }
     // Gift-card loads and their funding must stay atomic: the controller
     // only unwinds them via a full refund, so mixed sales cannot offer their
     // ordinary merchandise as a separate item refund.
@@ -509,6 +526,9 @@ private fun RefundDetailsCard(
                 "$${sale.totalAmount} · ${sale.completedAtLabel} · ${sale.memberLabel}",
                 style = MaterialTheme.typography.bodyMedium,
             )
+            sale.biltRewardsPayments.forEach {
+                Text(it.line, style = MaterialTheme.typography.bodySmall)
+            }
             sale.cardPayments.forEach {
                 Text(it.line, style = MaterialTheme.typography.bodySmall)
             }
@@ -560,22 +580,34 @@ private fun RefundDetailsCard(
                     mode = RefundMode.ITEMS
                 }
             }
-            if (splitCards && mode == RefundMode.FULL) {
+            if (splitTenders && mode == RefundMode.FULL) {
+                val rewards = sale.biltRewardsPayments.size
+                val cards = sale.cardPayments.size
                 Text(
-                    "Reverses all ${sale.cardPayments.size} card payments, newest first",
+                    "Reverses all ${returnTargets.size} payments (" +
+                        listOfNotNull(
+                                "Bilt Rewards".takeIf { rewards > 0 },
+                                "$cards card payment${if (cards == 1) "" else "s"}"
+                                    .takeIf {
+                                        cards > 0
+                                    },
+                            )
+                            .joinToString(" and ") +
+                        "), newest first",
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
-            if (splitCards && mode == RefundMode.ITEMS && sale.refundable) {
-                // each card payment is its own refund target, so the return must name one
+            if (splitTenders && mode == RefundMode.ITEMS && sale.refundable) {
+                // each card or Bilt Rewards payment is its own refund target, so the return must
+                // name one
                 Text("Return to:", style = MaterialTheme.typography.bodySmall)
-                sale.cardPayments.forEach { card ->
+                returnTargets.forEach { target ->
                     LabeledRadio(
-                        card.line + (card.remainingAmount?.let { " · up to $$it" }.orEmpty()),
-                        selected = card.poiTransactionId == returnCard?.poiTransactionId,
-                        enabled = card.returnable && sale.refundable,
+                        target.line + (target.remainingAmount?.let { " · up to $$it" }.orEmpty()),
+                        selected = target.poiTransactionId == returnTarget?.poiTransactionId,
+                        enabled = target.returnable && sale.refundable,
                     ) {
-                        pickedCard = card.poiTransactionId
+                        pickedTender = target.poiTransactionId
                     }
                 }
             }
@@ -676,7 +708,7 @@ private fun RefundDetailsCard(
                             controller.addReturnToBasket(
                                 sale.id,
                                 selectedSkus,
-                                returnCard?.poiTransactionId.takeIf { splitCards },
+                                returnTarget?.poiTransactionId.takeIf { splitTenders },
                             )
                             // the rung lines re-project with zero remaining;
                             // a stale selection would just read confusingly
@@ -1977,7 +2009,10 @@ private fun PaymentControls(state: EmulatorState, controller: EmulatorController
     // the whole sale's earn at card payment 1), so the checkbox needs it off. Partial approvals:
     // on, the cashier decides at the counter what happens to a card's shortfall; off, the SDK
     // retries on its own and then fails into the recovery dialog. Partial follow-ups work with
-    // implicit loyalty, so that checkbox stays available.
+    // implicit loyalty, so that checkbox stays available. On the simulator, a card payment whose
+    // cents end in 456 is approved for 60% (a partial card approval); in 789 comes back as a
+    // Bilt Rewards payment for 40% (a Partial with no card in it, the card follows for the rest);
+    // in 321 is approved in full with 25% of it paid in Bilt Rewards (a mixed payment).
     var splitCard by rememberSaveable { mutableStateOf(seed != null) }
     val cardAmounts =
         rememberSaveable(
