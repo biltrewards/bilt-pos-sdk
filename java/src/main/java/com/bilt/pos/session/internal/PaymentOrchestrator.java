@@ -48,6 +48,7 @@ import com.bilt.pos.session.SettlementFlow;
 import com.bilt.pos.session.basket.Basket;
 import com.bilt.pos.session.basket.BasketLineItem;
 import com.bilt.pos.session.identity.IdentifyResult;
+import com.bilt.pos.session.payment.BiltRewardsPaymentResult;
 import com.bilt.pos.session.payment.CardPaymentResult;
 import com.bilt.pos.session.payment.EarnedReward;
 import com.bilt.pos.session.payment.GiftCardPaymentResult;
@@ -94,6 +95,14 @@ import java.util.stream.Collectors;
 public final class PaymentOrchestrator {
 
   private static final Logger LOGGER = Logger.getLogger(PaymentOrchestrator.class.getName());
+
+  /**
+   * Whether a Bilt rewards payment that came back partial (the terminal's points leg, with no card
+   * in it) counts as one of the {@link SettlementFlow#MAX_AUTOMATIC_CARD_REQUESTS} requests a
+   * settlement without {@code onPartialCardApproval} sends: it is a payment request to the
+   * terminal, so it does, and at most two card requests follow it.
+   */
+  private static final boolean BILT_REWARDS_PARTIAL_COUNTS_AS_AUTOMATIC_REQUEST = true;
 
   /** Handlers captured from the payment flow. All may be {@code null}. */
   public static final class Handlers {
@@ -369,6 +378,37 @@ public final class PaymentOrchestrator {
     boolean partial() {
       return payment.getAmount().compareTo(requested) < 0;
     }
+
+    /** Whether Bilt rewards paid all of it: a rewards payment, not a card payment. */
+    boolean biltRewardsOnly() {
+      return isBiltRewardsOnly(payment);
+    }
+  }
+
+  /** Whether Bilt rewards paid all of {@code payment}, so no card was in it. */
+  private static boolean isBiltRewardsOnly(CardPaymentResult payment) {
+    return payment.getBiltRewardsAmount().signum() > 0
+        && payment.getBiltRewardsAmount().compareTo(payment.getAmount()) == 0;
+  }
+
+  /** The payments a card phase made that had a card in them, in order. */
+  private static List<CardPaymentResult> withCard(List<CardPaymentResult> payments) {
+    List<CardPaymentResult> cards = new ArrayList<>();
+    for (CardPaymentResult payment : payments) {
+      if (!isBiltRewardsOnly(payment)) {
+        cards.add(payment);
+      }
+    }
+    return cards;
+  }
+
+  /** A payment Bilt rewards paid in full, as the rewards payment it is. */
+  private static BiltRewardsPaymentResult biltRewardsPayment(CardPaymentResult payment) {
+    return BiltRewardsPaymentResult.builder()
+        .amount(payment.getAmount())
+        .poiTransactionId(payment.getPoiTransactionId())
+        .poiTransactionTimestamp(payment.getPoiTransactionTimestamp())
+        .build();
   }
 
   private final NexoExchange exchange;
@@ -634,6 +674,7 @@ public final class PaymentOrchestrator {
                 (saleTransaction, serviceId, response) ->
                     cardStep(
                         request,
+                        result,
                         stepBasket,
                         amount,
                         paidAmount,
@@ -666,7 +707,9 @@ public final class PaymentOrchestrator {
         // keeps a cashback amount the next card would carry again.
         if (charge.partial() && !partialHandler) {
           // cardStep let it through only while the automatic limit allows another request
-          automaticFollowUps++;
+          if (BILT_REWARDS_PARTIAL_COUNTS_AS_AUTOMATIC_REQUEST || !charge.biltRewardsOnly()) {
+            automaticFollowUps++;
+          }
           plan.insert(charge.requested.subtract(approved));
         } else if (charge.partial()) {
           // the register's decision reshapes the plan before plan.next(cardDue)
@@ -688,10 +731,23 @@ public final class PaymentOrchestrator {
         }
       }
     }
+    // every payment the card phase made: a payment Bilt rewards paid in full is reported as a
+    // rewards payment, and the rewards part of a card payment counts as rewards, not card money
+    BigDecimal biltRewards = BigDecimal.ZERO;
+    List<BiltRewardsPaymentResult> biltRewardsPayments = new ArrayList<>();
     for (CardPaymentResult cardPayment : cardPayments) {
-      cardCharged = cardCharged.add(cardPayment.getAmount());
+      cardCharged = cardCharged.add(cardPayment.getCardAmount());
+      biltRewards = biltRewards.add(cardPayment.getBiltRewardsAmount());
+      if (isBiltRewardsOnly(cardPayment)) {
+        biltRewardsPayments.add(biltRewardsPayment(cardPayment));
+      }
     }
-    if (!cardPayments.isEmpty()) {
+    List<CardPaymentResult> cardsOnly = withCard(cardPayments);
+    if (!cardsOnly.isEmpty()) {
+      copyFirstCardPayment(cardsOnly.get(0), result);
+    } else if (!cardPayments.isEmpty()) {
+      // a sale with no card in it reports its first rewards payment, as a gift-card-only sale
+      // reports its stored value payment
       copyFirstCardPayment(cardPayments.get(0), result);
     }
 
@@ -699,7 +755,8 @@ public final class PaymentOrchestrator {
     // use the same checkpoint recovery as every other step.
     if (chargeDue && loyalty && !options.disableAward) {
       Basket awardBasket = workingBasket;
-      BigDecimal awardTotal = storedValueCharged.add(cardCharged).add(externalPaid);
+      BigDecimal awardTotal =
+          storedValueCharged.add(cardCharged).add(biltRewards).add(externalPaid);
       runStep(
           request,
           committed,
@@ -729,6 +786,7 @@ public final class PaymentOrchestrator {
                 pointsValue,
                 storedValueCharged,
                 cardCharged,
+                biltRewards,
                 externalPaid,
                 options.cashback)
             : workingBasket;
@@ -744,10 +802,12 @@ public final class PaymentOrchestrator {
         movements.subList(request.priorMovements.size(), movements.size());
     return result
         .finalBasket(finalBasket)
-        .authorizedAmount(storedValueCharged.add(cardCharged))
+        .authorizedAmount(storedValueCharged.add(cardCharged).add(biltRewards))
         .storedValueAmountUsed(storedValueCharged)
         .cardAmountCharged(cardCharged)
-        .cardPayments(cardPayments)
+        .cardPayments(cardsOnly)
+        .biltRewardsAmount(biltRewards)
+        .biltRewardsPayments(biltRewardsPayments)
         .externalPaymentAmount(externalPaid)
         .storedValueLoadedAmount(storedValueLoaded)
         .redeemedRebates(redeemedRebates)
@@ -1292,7 +1352,10 @@ public final class PaymentOrchestrator {
             .approved(charge.payment.getAmount())
             .requested(charge.requested)
             .amountDue(cardDue)
-            .cardPayments(cardPayments)
+            .cardPayments(withCard(cardPayments))
+            .biltRewardsAmount(charge.payment.getBiltRewardsAmount())
+            .biltRewardsPayment(
+                charge.biltRewardsOnly() ? biltRewardsPayment(charge.payment) : null)
             .movement(charge.movement)
             .build();
     PartialApprovalDecision decision;
@@ -1800,6 +1863,7 @@ public final class PaymentOrchestrator {
    */
   private CardCharge cardStep(
       Request request,
+      SettlementResult.Builder result,
       Basket basket,
       BigDecimal amount,
       BigDecimal paidAmount,
@@ -1857,6 +1921,8 @@ public final class PaymentOrchestrator {
         body.getPaymentResult() != null && body.getPaymentResult().getAmountsResp() != null
             ? Wire.money(body.getPaymentResult().getAmountsResp().getAuthorizedAmount())
             : grossTotal;
+    // the part of the authorization the terminal paid with Bilt rewards, live or recovered
+    BigDecimal biltRewards = BiltRewards.parse(body.getResponse(), charged, result::warning);
 
     // Commit before validating so recovery sees the partial movement.
     // Retry and abort can reverse it; abandon deliberately leaves it standing.
@@ -1876,6 +1942,9 @@ public final class PaymentOrchestrator {
             null,
             null,
             null);
+    if (biltRewards != null) {
+      cardMovement = withBiltRewards(cardMovement, biltRewards);
+    }
     publishCommitted(request, committed, movements, cardMovement);
 
     // a partial authorization on the stored value step is the split
@@ -1894,7 +1963,7 @@ public final class PaymentOrchestrator {
     }
 
     return new CardCharge(
-        cardPayment(body, charged, charged.compareTo(grossTotal) < 0),
+        cardPayment(body, charged, charged.compareTo(grossTotal) < 0, biltRewards),
         grossTotal,
         saleTransaction,
         cardMovement);
@@ -1902,11 +1971,12 @@ public final class PaymentOrchestrator {
 
   /** One card payment's amount, references, acquirer data, and receipts. */
   private static CardPaymentResult cardPayment(
-      PaymentResponse body, BigDecimal charged, boolean partialApproval) {
+      PaymentResponse body, BigDecimal charged, boolean partialApproval, BigDecimal biltRewards) {
     CardPaymentResult.Builder payment =
         CardPaymentResult.builder()
             .amount(charged)
             .partialApproval(partialApproval)
+            .biltRewardsAmount(biltRewards)
             .customerReceipt(ReceiptMapper.customerReceipt(body.getPaymentReceipt()))
             .merchantReceipt(ReceiptMapper.merchantReceipt(body.getPaymentReceipt()));
     PaymentResult paymentResult = body.getPaymentResult();
@@ -1940,7 +2010,7 @@ public final class PaymentOrchestrator {
    * non-null values.
    */
   private static void copyPaymentArtifacts(PaymentResponse body, SettlementResult.Builder result) {
-    copyFirstCardPayment(cardPayment(body, BigDecimal.ZERO, false), result);
+    copyFirstCardPayment(cardPayment(body, BigDecimal.ZERO, false, null), result);
   }
 
   /**
@@ -2435,6 +2505,24 @@ public final class PaymentOrchestrator {
         .build();
   }
 
+  /** {@code movement} with the part of its amount that was Bilt rewards. */
+  private static SettlementMovement withBiltRewards(
+      SettlementMovement movement, BigDecimal biltRewards) {
+    return SettlementMovement.builder()
+        .step(movement.getStep())
+        .target(movement.getTarget())
+        .amount(movement.getAmount())
+        .saleTransactionId(movement.getSaleTransactionId())
+        .serviceId(movement.getServiceId())
+        .poiTransactionId(movement.getPoiTransactionId())
+        .poiTransactionTimestamp(movement.getPoiTransactionTimestamp())
+        .memberId(movement.getMemberId())
+        .points(movement.getPoints())
+        .pointBalance(movement.getPointBalance())
+        .biltRewardsAmount(biltRewards)
+        .build();
+  }
+
   /**
    * {@link #publishMovement} for the movement of the step just committed: links it to that commit
    * first, so a later reversal of the commit can name it (see {@link #notifyReversed}).
@@ -2507,6 +2595,7 @@ public final class PaymentOrchestrator {
             .poiTransactionTimestamp(reversal.poiTransactionTimestamp)
             .memberId(reversed.getMemberId())
             .points(reversed.getPoints())
+            .biltRewardsAmount(reversed.getBiltRewardsAmount())
             .reversedMovement(reversed)
             .build();
     try {
@@ -2736,6 +2825,7 @@ public final class PaymentOrchestrator {
       BigDecimal pointsValue,
       BigDecimal storedValue,
       BigDecimal cardPayment,
+      BigDecimal biltRewards,
       BigDecimal externalPayment,
       BigDecimal cashback) {
     // step handlers may recompute tax on discounted amounts, and that
@@ -2745,7 +2835,7 @@ public final class PaymentOrchestrator {
     // points. With no handler adjustments this is exactly the original
     // taxTotal. Cashback rides on the card authorization but is not part
     // of the sale.
-    BigDecimal netCharged = storedValue.add(cardPayment).add(externalPayment);
+    BigDecimal netCharged = storedValue.add(cardPayment).add(biltRewards).add(externalPayment);
     if (cashback != null) {
       netCharged = netCharged.subtract(cashback);
     }
@@ -2764,6 +2854,7 @@ public final class PaymentOrchestrator {
         .pointDiscountTotal(pointsValue)
         .storedValueTotal(storedValue)
         .cardPaymentTotal(cardPayment)
+        .biltRewardsTotal(biltRewards)
         .externalPaymentTotal(externalPayment)
         .build();
   }

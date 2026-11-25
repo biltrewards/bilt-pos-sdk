@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.54.0]
+
+### Changed
+
+- **Breaking:** `SettlementResult.getCardAmountCharged()` and the final basket's `getCardPaymentTotal()` no longer include Bilt rewards the terminal spent inside a payment. With implicit loyalty, a terminal that reports `biltRewardsAmount` used to have those rewards counted as card money; they are now in `getBiltRewardsAmount()` and `Basket.getBiltRewardsTotal()`. `getAuthorizedAmount()` still includes them. A terminal that does not send the key is read as all card, as before.
+- **Breaking:** a payment the terminal paid entirely with Bilt rewards is no longer a card payment. It is left out of `SettlementResult.getCardPayments()`, `OriginalSaleRecord.getCardPayments()`, `PartialCardApproval.getCardPayments()`, `VoidResult.getCardReversals()` and `RefundResult.getCardRefunds()`, and for a sale paid only with rewards `OriginalSaleRecord.getCardPoiTransactionId()` is `null`, so `RefundAllocation.card(amount, originalSale)` refuses it. `SettlementResult.getPoiTransactionId()` and the other single-payment getters still fall back to the rewards payment when the sale had no card payment.
+
+### Added
+
+- Bilt rewards as a tender in the Java SDK. With implicit loyalty the terminal can pay part or all of a payment with the member's Bilt rewards and reports them as `biltRewardsAmount=<amount>` in the Payment response's `AdditionalResponse`, live or recovered through TransactionStatus. `TenderType.BILT_REWARDS` and `ReversalStep.BILT_REWARDS` name them.
+  - A payment the rewards paid in full (with multi-tender on, the terminal's points leg, answered as `Partial`) is a `BiltRewardsPaymentResult` in `SettlementResult.getBiltRewardsPayments()`, and a `BiltRewardsPaymentRecord` in `OriginalSaleRecord.getBiltRewardsPayments()`.
+  - A card payment the rewards paid part of (multi-tender off) keeps its whole authorized amount in `CardPaymentResult.getAmount()`, with the rewards part in `getBiltRewardsAmount()` and the card part in `getCardAmount()`. `CardPaymentRecord.getBiltRewardsAmount()` keeps the rewards part.
+  - `SettlementResult.getBiltRewardsAmount()` totals the rewards, and `getBiltRewardsRefundedAmount()` the rewards a return settlement gave back. `SettlementMovement.getBiltRewardsAmount()` marks the rewards part of a `CARD_CHARGE` or `CARD_REFUND` movement: a rewards payment keeps the `CARD_CHARGE` step, so `onCardCharged` and `onCardChargeReversed` fire for it too.
+  - `PartialCardApproval.isBiltRewards()`, `getBiltRewardsPayment()` and `getBiltRewardsAmount()` tell the register the partial leg was rewards, not a card. The existing partial path collects the rest: the rewards leg counts as one of the `SettlementFlow.MAX_AUTOMATIC_CARD_REQUESTS` requests, and the later card requests' `PaidAmount` includes it.
+  - `voidTransaction()` reverses the rewards payments after the card payments, with the same `ReversalRequest` by their POI reference, and `refund()` refunds them after the card payments. `VoidResult.getBiltRewardsReversals()` and `RefundResult.getBiltRewardsRefunds()` list them, and `getReversedAmountByTender()` / `getRefundedAmountByTender()` report them as `BILT_REWARDS`. A card payment's rewards part is split out of its reversal or full refund the same way (`TenderMovement.getBiltRewardsAmount()`), from the response's `biltRewardsAmount` when the terminal sends it, otherwise from the sale's record. A partial refund of such a payment is split only when the terminal reports the key.
+  - `RefundAllocation.biltRewards(amount, poiTransactionId, timestamp)`, `biltRewards(amount, BiltRewardsPaymentRecord)` and `biltRewards(amount, OriginalSaleRecord)`, with `RefundAllocationType.BILT_REWARDS`, refund a rewards payment in a return settlement.
+  - The CLI's payment log line shows the Bilt rewards next to the card amount.
+- Docs: `biltRewardsAmount` in [Make a payment](docs/make-payment.md), and a Bilt rewards variant in the TerminalShopperSession guide.
+
 ## [0.53.0]
 
 ### Added

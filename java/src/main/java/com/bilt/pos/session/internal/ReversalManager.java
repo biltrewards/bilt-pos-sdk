@@ -24,6 +24,7 @@ import com.bilt.pos.nexo.model.PaymentRequest;
 import com.bilt.pos.nexo.model.PaymentResponse;
 import com.bilt.pos.nexo.model.PaymentTransaction;
 import com.bilt.pos.nexo.model.PaymentTypeEnum;
+import com.bilt.pos.nexo.model.Response;
 import com.bilt.pos.nexo.model.ReversalResponse;
 import com.bilt.pos.nexo.model.SaleItem;
 import com.bilt.pos.nexo.model.SaleToPOIRequest;
@@ -206,6 +207,7 @@ public final class ReversalManager {
     List<PaymentResponse> refunded = new ArrayList<>();
     List<String> refundedOriginals = new ArrayList<>();
     List<TenderMovement> cardRefunds = new ArrayList<>();
+    List<TenderMovement> biltRewardsRefunds = new ArrayList<>();
     List<TenderAmount> byTender = new ArrayList<>();
     // the first refund's receipts, parsed once for its entry and the single-value fields
     Receipt[] firstReceipts = null;
@@ -216,7 +218,7 @@ public final class ReversalManager {
       String[] sentServiceId = new String[1];
       PaymentResponse body =
           runStep(
-              ReversalStep.CARD,
+              original.getStep(),
               effective,
               decider == null,
               () -> {
@@ -225,7 +227,8 @@ public final class ReversalManager {
                 sentServiceId[0] =
                     serviceId != null
                         ? serviceId
-                        : mintServiceId(ReversalStep.CARD, MessageCategoryType.PAYMENT, beforeStep);
+                        : mintServiceId(
+                            original.getStep(), MessageCategoryType.PAYMENT, beforeStep);
                 return sendRefund(
                     amount,
                     saleItems,
@@ -264,20 +267,36 @@ public final class ReversalManager {
         }
         refunded.add(body);
         refundedOriginals.add(String.valueOf(originalPoiTxnId));
-        byTender.add(new TenderAmount(original.tender, originalPoiTxnId, legAmount));
-        if (original.tender == TenderType.CARD) {
-          cardRefunds.add(
+        // a full refund returns a card payment's rewards part too; a partial one only what the
+        // terminal reports returning to rewards
+        BigDecimal biltRewards =
+            biltRewardsPart(
+                original,
+                body.getResponse(),
+                legAmount,
+                original.amount != null
+                    && legAmount != null
+                    && legAmount.compareTo(original.amount) == 0);
+        addByTender(byTender, original, legAmount, biltRewards);
+        if (original.tender == TenderType.CARD || original.tender == TenderType.BILT_REWARDS) {
+          TenderMovement refund =
               TenderMovement.builder()
                   .tenderType(original.tender)
                   .originalPoiTransactionId(originalPoiTxnId)
                   .amount(legAmount)
+                  .biltRewardsAmount(biltRewards)
                   .poiTransactionId(Wire.txnId(body.getPoiData()))
                   .poiTransactionTimestamp(Wire.txnTimestamp(body.getPoiData()))
                   .approvalCode(Wire.approvalCode(body))
                   .serviceId(sentServiceId[0])
                   .customerReceipt(customerReceipt)
                   .merchantReceipt(merchantReceipt)
-                  .build());
+                  .build();
+          if (original.tender == TenderType.CARD) {
+            cardRefunds.add(refund);
+          } else {
+            biltRewardsRefunds.add(refund);
+          }
         }
         onRefunded.accept(originalPoiTxnId);
       }
@@ -340,6 +359,7 @@ public final class ReversalManager {
         .success(true)
         .refundedAmount(sum(byTender))
         .cardRefunds(cardRefunds)
+        .biltRewardsRefunds(biltRewardsRefunds)
         .refundedAmountByTender(byTender)
         .approvalCode(Wire.approvalCode(first))
         .poiTransactionId(Wire.txnId(first.getPoiData()))
@@ -361,6 +381,53 @@ public final class ReversalManager {
             ? body.getPaymentResult().getAmountsResp().getAuthorizedAmount()
             : null;
     return authorized != null ? Wire.money(authorized) : fallback;
+  }
+
+  /**
+   * The part of what one tender leg returned that went back to Bilt rewards, or {@code null} for
+   * none or unknown. A Bilt rewards payment returns its whole amount to rewards. For a card leg it
+   * is what the terminal reported ({@code biltRewardsAmount}); without that, when the leg returned
+   * the original payment whole ({@code whole}), the rewards part the sale recorded.
+   */
+  private static BigDecimal biltRewardsPart(
+      ReversalMovement leg, Response response, BigDecimal amount, boolean whole) {
+    if (leg.tender == TenderType.BILT_REWARDS) {
+      return amount;
+    }
+    if (leg.tender != TenderType.CARD) {
+      return null;
+    }
+    BigDecimal reported = BiltRewards.parse(response, amount);
+    if (reported != null) {
+      return reported;
+    }
+    if (!whole || leg.biltRewardsAmount == null || leg.biltRewardsAmount.signum() <= 0) {
+      return null;
+    }
+    return amount == null || leg.biltRewardsAmount.compareTo(amount) <= 0
+        ? leg.biltRewardsAmount
+        : null;
+  }
+
+  /**
+   * Adds one tender leg to a per-tender breakdown: a card leg with a rewards part as two entries
+   * with its reference, the card part under {@code CARD} and the rewards part under {@code
+   * BILT_REWARDS}.
+   */
+  private static void addByTender(
+      List<TenderAmount> byTender,
+      ReversalMovement leg,
+      BigDecimal amount,
+      BigDecimal biltRewards) {
+    if (leg.tender == TenderType.CARD && biltRewards != null && amount != null) {
+      BigDecimal card = amount.subtract(biltRewards);
+      if (card.signum() > 0) {
+        byTender.add(new TenderAmount(TenderType.CARD, leg.poiTransactionId, card));
+      }
+      byTender.add(new TenderAmount(TenderType.BILT_REWARDS, leg.poiTransactionId, biltRewards));
+      return;
+    }
+    byTender.add(new TenderAmount(leg.tender, leg.poiTransactionId, amount));
   }
 
   /**
@@ -687,15 +754,19 @@ public final class ReversalManager {
 
     List<TenderAmount> byTender = new ArrayList<>();
     List<TenderMovement> cardReversals = new ArrayList<>();
+    List<TenderMovement> biltRewardsReversals = new ArrayList<>();
     TenderMovement storedValueReversal = null;
     for (MoneyLeg leg : money) {
       BigDecimal amount = leg.amount();
-      byTender.add(new TenderAmount(leg.movement.tender, leg.movement.poiTransactionId, amount));
+      BigDecimal biltRewards =
+          biltRewardsPart(leg.movement, leg.response.getResponse(), amount, true);
+      addByTender(byTender, leg.movement, amount, biltRewards);
       TenderMovement movement =
           TenderMovement.builder()
               .tenderType(leg.movement.tender)
               .originalPoiTransactionId(leg.movement.poiTransactionId)
               .amount(amount)
+              .biltRewardsAmount(biltRewards)
               .poiTransactionId(Wire.txnId(leg.response.getPoiData()))
               .poiTransactionTimestamp(Wire.txnTimestamp(leg.response.getPoiData()))
               .serviceId(leg.serviceId)
@@ -704,6 +775,8 @@ public final class ReversalManager {
               .build();
       if (leg.movement.tender == TenderType.CARD) {
         cardReversals.add(movement);
+      } else if (leg.movement.tender == TenderType.BILT_REWARDS) {
+        biltRewardsReversals.add(movement);
       } else {
         // a sale has at most one stored value payment
         storedValueReversal = movement;
@@ -726,6 +799,7 @@ public final class ReversalManager {
             .success(true)
             .reversedAmount(reversedAmount)
             .cardReversals(cardReversals)
+            .biltRewardsReversals(biltRewardsReversals)
             .storedValueReversal(storedValueReversal)
             .reversedAmountByTender(byTender)
             .pointsReversed(points.pointsReversed)
@@ -838,7 +912,7 @@ public final class ReversalManager {
         case REBATE:
         case AWARD:
           return moneyAnchored ? ReversalDecision.SKIP : ReversalDecision.ABORT;
-        default: // Stored value load, card, or stored value tender
+        default: // Stored value load, card, Bilt rewards, or stored value tender
           return ReversalDecision.ABORT;
       }
     };
@@ -872,6 +946,7 @@ public final class ReversalManager {
       case STORED_VALUE_LOAD:
         return MessageCategoryType.STORED_VALUE;
       case CARD:
+      case BILT_REWARDS:
       case STORED_VALUE:
         return MessageCategoryType.REVERSAL;
       default: // Redemption, rebate, or award refund
@@ -882,6 +957,7 @@ public final class ReversalManager {
   private static boolean isMoneyLeg(ReversalStep step) {
     return step == ReversalStep.STORED_VALUE_LOAD
         || step == ReversalStep.CARD
+        || step == ReversalStep.BILT_REWARDS
         || step == ReversalStep.STORED_VALUE;
   }
 
@@ -925,6 +1001,8 @@ public final class ReversalManager {
         return "the rebate";
       case AWARD:
         return "the award";
+      case BILT_REWARDS:
+        return "the Bilt rewards payment";
       default:
         return "the card leg";
     }

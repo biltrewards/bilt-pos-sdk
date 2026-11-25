@@ -28,6 +28,7 @@ public final class RefundResult {
   private final boolean success;
   private final BigDecimal refundedAmount;
   private final List<TenderMovement> cardRefunds;
+  private final List<TenderMovement> biltRewardsRefunds;
   private final List<TenderAmount> refundedAmountByTender;
   private final String approvalCode;
   private final String poiTransactionId;
@@ -41,6 +42,8 @@ public final class RefundResult {
     this.success = builder.success;
     this.refundedAmount = builder.refundedAmount;
     this.cardRefunds = Collections.unmodifiableList(new ArrayList<>(builder.cardRefunds));
+    this.biltRewardsRefunds =
+        Collections.unmodifiableList(new ArrayList<>(builder.biltRewardsRefunds));
     this.refundedAmountByTender =
         Collections.unmodifiableList(new ArrayList<>(builder.refundedAmountByTender));
     this.approvalCode = builder.approvalCode;
@@ -107,18 +110,30 @@ public final class RefundResult {
   /**
    * Every card payment this call refunded, in the order the requests were sent (newest card payment
    * first), each with the terminal's own reference and receipts. Empty when no card payment was
-   * refunded by this call. Every entry's {@link TenderMovement#getTenderType()} is {@code CARD}.
+   * refunded by this call. Every entry's {@link TenderMovement#getTenderType()} is {@code CARD}. A
+   * Bilt rewards payment is not a card payment: see {@link #getBiltRewardsRefunds()}.
    */
   public List<TenderMovement> getCardRefunds() {
     return cardRefunds;
   }
 
   /**
+   * Every Bilt rewards payment this call refunded, in the order the requests were sent, each with
+   * the terminal's own reference. Empty when none was. Every entry's {@link
+   * TenderMovement#getTenderType()} is {@code BILT_REWARDS}.
+   */
+  public List<TenderMovement> getBiltRewardsRefunds() {
+    return biltRewardsRefunds;
+  }
+
+  /**
    * The amount each money tender leg of this call returned, in the order the legs were sent: one
-   * entry per card payment and one for a stored value payment. Loyalty movements are not tenders
-   * and are not listed. When there is any entry, the entries sum to {@link #getRefundedAmount()};
-   * when a leg's amount is unknown, that entry's amount and {@link #getRefundedAmount()} are both
-   * {@code null}.
+   * entry per card payment, one per Bilt rewards payment and one for a stored value payment. A card
+   * payment that Bilt rewards paid part of has two entries with its reference, its card part under
+   * {@code CARD} and its rewards part under {@code BILT_REWARDS}, when the rewards part is known.
+   * Loyalty movements are not tenders and are not listed. When there is any entry, the entries sum
+   * to {@link #getRefundedAmount()}; when a leg's amount is unknown, that entry's amount and {@link
+   * #getRefundedAmount()} are both {@code null}.
    */
   public List<TenderAmount> getRefundedAmountByTender() {
     return refundedAmountByTender;
@@ -140,6 +155,7 @@ public final class RefundResult {
     private boolean success;
     private BigDecimal refundedAmount;
     private List<TenderMovement> cardRefunds = new ArrayList<>();
+    private List<TenderMovement> biltRewardsRefunds = new ArrayList<>();
     private List<TenderAmount> refundedAmountByTender = new ArrayList<>();
     private String approvalCode;
     private String poiTransactionId;
@@ -153,6 +169,17 @@ public final class RefundResult {
 
     public Builder cardRefunds(List<TenderMovement> cardRefunds) {
       this.cardRefunds = cardRefunds == null ? new ArrayList<>() : new ArrayList<>(cardRefunds);
+      return this;
+    }
+
+    public Builder biltRewardsRefunds(List<TenderMovement> biltRewardsRefunds) {
+      this.biltRewardsRefunds =
+          biltRewardsRefunds == null ? new ArrayList<>() : new ArrayList<>(biltRewardsRefunds);
+      return this;
+    }
+
+    public Builder addBiltRewardsRefund(TenderMovement biltRewardsRefund) {
+      this.biltRewardsRefunds.add(Objects.requireNonNull(biltRewardsRefund, "biltRewardsRefund"));
       return this;
     }
 

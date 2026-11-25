@@ -11,6 +11,7 @@ package com.bilt.pos.session.settlement;
 
 import com.bilt.pos.session.Receipt;
 import com.bilt.pos.session.basket.Basket;
+import com.bilt.pos.session.payment.BiltRewardsPaymentResult;
 import com.bilt.pos.session.payment.CardPaymentResult;
 import com.bilt.pos.session.payment.EarnedReward;
 import com.bilt.pos.session.payment.RedeemedRebate;
@@ -35,6 +36,13 @@ import java.util.Objects;
  * response lacks a value, they keep the stored value payment's, and a gift-card-only sale reports
  * its stored value payment there.
  *
+ * <p>Bilt rewards the terminal spent inside a payment (implicit loyalty, reported as {@code
+ * biltRewardsAmount}) are not card money. A payment the rewards paid in full is in {@link
+ * #getBiltRewardsPayments()}, never in {@link #getCardPayments()}; the rewards part of a card
+ * payment is its {@link CardPaymentResult#getBiltRewardsAmount()}. {@link #getBiltRewardsAmount()}
+ * totals both, and {@link #getCardAmountCharged()} leaves them out. A sale with no card payment
+ * reports its first rewards payment in the single-payment getters, as a gift-card-only sale does.
+ *
  * <p>The loyalty award is best-effort (the terminal stores-and-forwards when the loyalty host is
  * down): a failed award does not fail the checkout but is reported in {@link #getWarnings()}.
  */
@@ -50,6 +58,8 @@ public final class SettlementResult {
   private final BigDecimal cardAmountCharged;
   private final BigDecimal externalPaymentAmount;
   private final List<CardPaymentResult> cardPayments;
+  private final BigDecimal biltRewardsAmount;
+  private final List<BiltRewardsPaymentResult> biltRewardsPayments;
   private final String approvalCode;
   private final String acquirerTransactionId;
   private final String paymentBrand;
@@ -83,6 +93,7 @@ public final class SettlementResult {
   private final Instant redemptionPoiTransactionTimestamp;
 
   private final BigDecimal cardRefundedAmount;
+  private final BigDecimal biltRewardsRefundedAmount;
   private final BigDecimal storedValueRefundedAmount;
   private final BigDecimal externalRefundedAmount;
   private final BigDecimal loyaltyRefundedAmount;
@@ -98,6 +109,9 @@ public final class SettlementResult {
     this.cardAmountCharged = builder.cardAmountCharged;
     this.externalPaymentAmount = builder.externalPaymentAmount;
     this.cardPayments = Collections.unmodifiableList(new ArrayList<>(builder.cardPayments));
+    this.biltRewardsAmount = builder.biltRewardsAmount;
+    this.biltRewardsPayments =
+        Collections.unmodifiableList(new ArrayList<>(builder.biltRewardsPayments));
     this.approvalCode = builder.approvalCode;
     this.acquirerTransactionId = builder.acquirerTransactionId;
     this.paymentBrand = builder.paymentBrand;
@@ -123,6 +137,7 @@ public final class SettlementResult {
     this.redemptionPoiTransactionId = builder.redemptionPoiTransactionId;
     this.redemptionPoiTransactionTimestamp = builder.redemptionPoiTransactionTimestamp;
     this.cardRefundedAmount = builder.cardRefundedAmount;
+    this.biltRewardsRefundedAmount = builder.biltRewardsRefundedAmount;
     this.storedValueRefundedAmount = builder.storedValueRefundedAmount;
     this.externalRefundedAmount = builder.externalRefundedAmount;
     this.loyaltyRefundedAmount = builder.loyaltyRefundedAmount;
@@ -148,7 +163,10 @@ public final class SettlementResult {
     return finalBasket;
   }
 
-  /** Total authorized by terminal-managed stored-value and card tenders. */
+  /**
+   * Total authorized by terminal-managed stored-value and card tenders, Bilt rewards spent inside a
+   * payment included ({@link #getBiltRewardsAmount()}).
+   */
   public BigDecimal getAuthorizedAmount() {
     return authorizedAmount;
   }
@@ -189,8 +207,9 @@ public final class SettlementResult {
   }
 
   /**
-   * Amount charged to payment cards, the sum of {@link #getCardPayments()}; zero if fully covered
-   * otherwise.
+   * Amount charged to payment cards, the sum of each card payment's {@link
+   * CardPaymentResult#getCardAmount()}; zero if fully covered otherwise. Bilt rewards are not part
+   * of it, even when they paid part of a card payment: see {@link #getBiltRewardsAmount()}.
    */
   public BigDecimal getCardAmountCharged() {
     return cardAmountCharged;
@@ -203,6 +222,23 @@ public final class SettlementResult {
    */
   public List<CardPaymentResult> getCardPayments() {
     return cardPayments;
+  }
+
+  /**
+   * Value of the Bilt rewards the terminal spent in this settlement's payments: every {@link
+   * #getBiltRewardsPayments()} payment plus the rewards part of every card payment ({@link
+   * CardPaymentResult#getBiltRewardsAmount()}); zero when none.
+   */
+  public BigDecimal getBiltRewardsAmount() {
+    return biltRewardsAmount;
+  }
+
+  /**
+   * Every payment the terminal paid entirely with Bilt rewards, in the order they were made; empty
+   * when none. These are not card payments, so {@link #getCardPayments()} leaves them out.
+   */
+  public List<BiltRewardsPaymentResult> getBiltRewardsPayments() {
+    return biltRewardsPayments;
   }
 
   /** Amount collected through register-managed tenders such as cash. */
@@ -330,9 +366,21 @@ public final class SettlementResult {
     return redemptionPoiTransactionTimestamp;
   }
 
-  /** Total returned to payment cards during this settlement. */
+  /**
+   * Total returned to payment cards during this settlement. Bilt rewards a refund returned are not
+   * part of it: see {@link #getBiltRewardsRefundedAmount()}.
+   */
   public BigDecimal getCardRefundedAmount() {
     return cardRefundedAmount;
+  }
+
+  /**
+   * Total of Bilt rewards returned during this settlement: the {@link
+   * RefundAllocation#biltRewards(java.math.BigDecimal, String, Instant)} allocations, and the
+   * rewards part a card refund reported returning.
+   */
+  public BigDecimal getBiltRewardsRefundedAmount() {
+    return biltRewardsRefundedAmount;
   }
 
   /** Total restored to stored value cards during this settlement. */
@@ -380,6 +428,8 @@ public final class SettlementResult {
     private BigDecimal cardAmountCharged = BigDecimal.ZERO;
     private BigDecimal externalPaymentAmount = BigDecimal.ZERO;
     private List<CardPaymentResult> cardPayments = new ArrayList<>();
+    private BigDecimal biltRewardsAmount = BigDecimal.ZERO;
+    private List<BiltRewardsPaymentResult> biltRewardsPayments = new ArrayList<>();
     private String approvalCode;
     private String acquirerTransactionId;
     private String paymentBrand;
@@ -404,6 +454,7 @@ public final class SettlementResult {
     private String redemptionPoiTransactionId;
     private Instant redemptionPoiTransactionTimestamp;
     private BigDecimal cardRefundedAmount = BigDecimal.ZERO;
+    private BigDecimal biltRewardsRefundedAmount = BigDecimal.ZERO;
     private BigDecimal storedValueRefundedAmount = BigDecimal.ZERO;
     private BigDecimal externalRefundedAmount = BigDecimal.ZERO;
     private BigDecimal loyaltyRefundedAmount = BigDecimal.ZERO;
@@ -421,6 +472,8 @@ public final class SettlementResult {
       this.cardAmountCharged = result.cardAmountCharged;
       this.externalPaymentAmount = result.externalPaymentAmount;
       this.cardPayments = new ArrayList<>(result.cardPayments);
+      this.biltRewardsAmount = result.biltRewardsAmount;
+      this.biltRewardsPayments = new ArrayList<>(result.biltRewardsPayments);
       this.approvalCode = result.approvalCode;
       this.acquirerTransactionId = result.acquirerTransactionId;
       this.paymentBrand = result.paymentBrand;
@@ -445,6 +498,7 @@ public final class SettlementResult {
       this.redemptionPoiTransactionId = result.redemptionPoiTransactionId;
       this.redemptionPoiTransactionTimestamp = result.redemptionPoiTransactionTimestamp;
       this.cardRefundedAmount = result.cardRefundedAmount;
+      this.biltRewardsRefundedAmount = result.biltRewardsRefundedAmount;
       this.storedValueRefundedAmount = result.storedValueRefundedAmount;
       this.externalRefundedAmount = result.externalRefundedAmount;
       this.loyaltyRefundedAmount = result.loyaltyRefundedAmount;
@@ -497,6 +551,25 @@ public final class SettlementResult {
 
     public Builder addCardPayment(CardPaymentResult cardPayment) {
       this.cardPayments.add(Objects.requireNonNull(cardPayment, "cardPayment"));
+      return this;
+    }
+
+    public Builder biltRewardsAmount(BigDecimal biltRewardsAmount) {
+      this.biltRewardsAmount = biltRewardsAmount;
+      return this;
+    }
+
+    public Builder biltRewardsPayments(List<BiltRewardsPaymentResult> biltRewardsPayments) {
+      this.biltRewardsPayments = new ArrayList<>();
+      if (biltRewardsPayments != null) {
+        biltRewardsPayments.forEach(this::addBiltRewardsPayment);
+      }
+      return this;
+    }
+
+    public Builder addBiltRewardsPayment(BiltRewardsPaymentResult biltRewardsPayment) {
+      this.biltRewardsPayments.add(
+          Objects.requireNonNull(biltRewardsPayment, "biltRewardsPayment"));
       return this;
     }
 
@@ -620,6 +693,11 @@ public final class SettlementResult {
 
     public Builder cardRefundedAmount(BigDecimal cardRefundedAmount) {
       this.cardRefundedAmount = cardRefundedAmount;
+      return this;
+    }
+
+    public Builder biltRewardsRefundedAmount(BigDecimal biltRewardsRefundedAmount) {
+      this.biltRewardsRefundedAmount = biltRewardsRefundedAmount;
       return this;
     }
 

@@ -41,6 +41,7 @@ public final class SettlementMovement {
   private final String externalTenderType;
   private final String externalReference;
   private final SettlementMovement reversedMovement;
+  private final BigDecimal biltRewardsAmount;
 
   private SettlementMovement(Builder builder) {
     this.step = builder.step;
@@ -56,6 +57,7 @@ public final class SettlementMovement {
     this.externalTenderType = builder.externalTenderType;
     this.externalReference = builder.externalReference;
     this.reversedMovement = builder.reversedMovement;
+    this.biltRewardsAmount = builder.biltRewardsAmount;
   }
 
   public static Builder builder() {
@@ -132,6 +134,18 @@ public final class SettlementMovement {
     return reversedMovement;
   }
 
+  /**
+   * The part of {@link #getAmount()} that was Bilt rewards, not card money, or {@code null} when
+   * none was. A {@code CARD_CHARGE} movement carries it when the terminal paid part or all of the
+   * payment with Bilt rewards ({@code biltRewardsAmount}): equal to the amount, the payment was a
+   * Bilt rewards payment with no card in it. A {@code CARD_REFUND} movement carries it for a {@link
+   * RefundAllocationType#BILT_REWARDS} allocation, and for the rewards part a card refund reported
+   * returning.
+   */
+  public BigDecimal getBiltRewardsAmount() {
+    return biltRewardsAmount;
+  }
+
   /** Builder for {@link SettlementMovement}. */
   public static final class Builder {
 
@@ -148,6 +162,7 @@ public final class SettlementMovement {
     private String externalTenderType;
     private String externalReference;
     private SettlementMovement reversedMovement;
+    private BigDecimal biltRewardsAmount;
 
     private Builder() {}
 
@@ -214,6 +229,11 @@ public final class SettlementMovement {
     /** Makes this a reversal notice for {@code reversedMovement}; see {@link #isReversal()}. */
     public Builder reversedMovement(SettlementMovement reversedMovement) {
       this.reversedMovement = reversedMovement;
+      return this;
+    }
+
+    public Builder biltRewardsAmount(BigDecimal biltRewardsAmount) {
+      this.biltRewardsAmount = biltRewardsAmount;
       return this;
     }
 

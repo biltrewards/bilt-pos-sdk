@@ -87,10 +87,12 @@ public final class SettlementFlow extends SessionFlow<SettlementResult> {
    * shortfall: the request that came back partial counts as the first, so the SDK adds at most
    * {@code MAX_AUTOMATIC_CARD_REQUESTS - 1} automatic follow-up requests per settlement. Planned
    * card payments ({@code SettlementOptions.cardPayments}) and requests the register retries do not
-   * count. When the last request allowed comes back partial too, that card step fails as {@code
-   * DECLINED} to {@link #onError}, with the earlier card payments still committed: {@code abort()}
-   * (the default) reverses them all, and {@code retry()} or {@code external()} first reverse that
-   * last partial charge.
+   * count. A Bilt rewards payment the terminal answered as partial (its points leg, with no card in
+   * it) is a request to the terminal and counts like a card request: after it, at most two card
+   * requests follow. When the last request allowed comes back partial too, that card step fails as
+   * {@code DECLINED} to {@link #onError}, with the earlier card payments still committed: {@code
+   * abort()} (the default) reverses them all, and {@code retry()} or {@code external()} first
+   * reverse that last partial charge.
    */
   public static final int MAX_AUTOMATIC_CARD_REQUESTS = 3;
 
@@ -186,6 +188,12 @@ public final class SettlementFlow extends SessionFlow<SettlementResult> {
    * Called when a card charge leg commits: once per card payment, so several times for a split
    * settlement ({@code SettlementOptions.cardPayments}). See {@link #onMovement} for the
    * provisional charge-side callback contract.
+   *
+   * <p>It also fires for a payment request the terminal paid partly or entirely with Bilt rewards
+   * (implicit loyalty): the movement's {@link SettlementMovement#getBiltRewardsAmount()} is the
+   * rewards part, and equals {@link SettlementMovement#getAmount()} when no card was in it — a Bilt
+   * rewards payment, which the result reports in {@link SettlementResult#getBiltRewardsPayments()}
+   * rather than as a card payment. It is {@code null} for a card-only payment.
    */
   public SettlementFlow onCardCharged(Consumer<SettlementMovement> handler) {
     return register(() -> this.cardChargeHandler = requireHandler(handler));
@@ -205,6 +213,10 @@ public final class SettlementFlow extends SessionFlow<SettlementResult> {
    * is logged and the reversal goes on. Reversals that run outside a settlement (a retried {@code
    * settle()} finishing the standing movements an earlier unwind left, or {@code
    * voidTransaction()}) report through their own results, not through this callback.
+   *
+   * <p>Like {@link #onCardCharged}, it also fires for a reversed payment Bilt rewards paid part or
+   * all of: the notice's {@link SettlementMovement#getBiltRewardsAmount()} (and its reversed
+   * movement's) is the rewards part, and equals the amount for a Bilt rewards payment.
    */
   public SettlementFlow onCardChargeReversed(Consumer<SettlementMovement> handler) {
     return register(() -> this.cardChargeReversedHandler = requireHandler(handler));
@@ -223,6 +235,11 @@ public final class SettlementFlow extends SessionFlow<SettlementResult> {
    * the shortfall, as {@link PartialApprovalDecision#anotherCard()} does, up to {@link
    * #MAX_AUTOMATIC_CARD_REQUESTS}. A registered handler replaces that default entirely and has no
    * limit: it can count {@link PartialCardApproval#getCardPayments()} itself.
+   *
+   * <p>With implicit loyalty and multi-tender on the terminal, the partial payment can be the
+   * terminal's Bilt rewards leg: rewards paid part of the sale and no card was in it. The handler
+   * is called for it like for a card ({@link PartialCardApproval#isBiltRewards()} tells them
+   * apart), and the default sends a card request for the rest.
    *
    * <p>The handler is never called for a sale with cashback (a partial there, including a refused
    * cashback, fails as {@code DECLINED}, with or without the handler), nor for an authorization of

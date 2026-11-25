@@ -15,6 +15,13 @@ public enum RefundAllocationType {
   /** Return money to a payment card using a Nexo PaymentRequest(Refund). */
   CARD,
 
+  /**
+   * Return Bilt rewards to the member by refunding a Bilt rewards payment of the original sale (a
+   * payment the terminal paid entirely with rewards) using a Nexo PaymentRequest(Refund) against
+   * its POI reference: the same request as a linked {@link #CARD} refund, reported as rewards.
+   */
+  BILT_REWARDS,
+
   /** Return money to the original stored value tender using a Nexo PaymentRequest(Refund). */
   STORED_VALUE,
 

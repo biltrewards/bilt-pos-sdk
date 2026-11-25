@@ -25,11 +25,14 @@ public final class PoiRef {
   final Instant timestamp;
   // what the original movement moved, when known: a full reversal or refund returns this much
   final BigDecimal amount;
+  // the part of amount that was Bilt rewards, when known
+  final BigDecimal biltRewardsAmount;
 
-  private PoiRef(String txnId, Instant timestamp, BigDecimal amount) {
+  private PoiRef(String txnId, Instant timestamp, BigDecimal amount, BigDecimal biltRewardsAmount) {
     this.txnId = txnId;
     this.timestamp = timestamp;
     this.amount = amount;
+    this.biltRewardsAmount = biltRewardsAmount;
   }
 
   /** The reference, or {@code null} when the sale has no such leg. */
@@ -39,6 +42,15 @@ public final class PoiRef {
 
   /** The reference with the original movement's amount, or {@code null} without a reference. */
   public static PoiRef ofNullable(String txnId, Instant timestamp, BigDecimal amount) {
-    return txnId == null ? null : new PoiRef(txnId, timestamp, amount);
+    return ofNullable(txnId, timestamp, amount, null);
+  }
+
+  /**
+   * The reference of a card payment whose {@code amount} includes {@code biltRewardsAmount} of Bilt
+   * rewards, or {@code null} without a reference.
+   */
+  public static PoiRef ofNullable(
+      String txnId, Instant timestamp, BigDecimal amount, BigDecimal biltRewardsAmount) {
+    return txnId == null ? null : new PoiRef(txnId, timestamp, amount, biltRewardsAmount);
   }
 }

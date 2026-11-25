@@ -31,6 +31,7 @@ public final class VoidResult {
   private final boolean success;
   private final BigDecimal reversedAmount;
   private final List<TenderMovement> cardReversals;
+  private final List<TenderMovement> biltRewardsReversals;
   private final TenderMovement storedValueReversal;
   private final List<TenderAmount> reversedAmountByTender;
   private final String poiTransactionId;
@@ -45,6 +46,8 @@ public final class VoidResult {
     this.success = builder.success;
     this.reversedAmount = builder.reversedAmount;
     this.cardReversals = Collections.unmodifiableList(new ArrayList<>(builder.cardReversals));
+    this.biltRewardsReversals =
+        Collections.unmodifiableList(new ArrayList<>(builder.biltRewardsReversals));
     this.storedValueReversal = builder.storedValueReversal;
     this.reversedAmountByTender =
         Collections.unmodifiableList(new ArrayList<>(builder.reversedAmountByTender));
@@ -116,10 +119,20 @@ public final class VoidResult {
    * Every card payment this call reversed, in the order the requests were sent (newest card payment
    * first), each with the terminal's own reference and receipts. Empty when no card payment was
    * reversed by this call. Every entry's {@link TenderMovement#getTenderType()} is {@code CARD}.
-   * The stored value leg is {@link #getStoredValueReversal()}.
+   * The stored value leg is {@link #getStoredValueReversal()}, and a Bilt rewards payment is {@link
+   * #getBiltRewardsReversals()}.
    */
   public List<TenderMovement> getCardReversals() {
     return cardReversals;
+  }
+
+  /**
+   * Every Bilt rewards payment this call reversed (a payment the terminal paid entirely with Bilt
+   * rewards), in the order the requests were sent, each with the terminal's own reference. Empty
+   * when none was. Every entry's {@link TenderMovement#getTenderType()} is {@code BILT_REWARDS}.
+   */
+  public List<TenderMovement> getBiltRewardsReversals() {
+    return biltRewardsReversals;
   }
 
   /**
@@ -132,7 +145,9 @@ public final class VoidResult {
 
   /**
    * The amount each money tender leg of this call returned, in the order the legs were sent: one
-   * entry per card payment and one for a stored value payment. Loyalty movements are not tenders
+   * entry per card payment, one per Bilt rewards payment and one for a stored value payment. A card
+   * payment that Bilt rewards paid part of has two entries with its reference, its card part under
+   * {@code CARD} and its rewards part under {@code BILT_REWARDS}. Loyalty movements are not tenders
    * and are not listed. When there is any entry, the entries sum to {@link #getReversedAmount()};
    * when a leg's amount is unknown, that entry's amount and {@link #getReversedAmount()} are both
    * {@code null}.
@@ -157,6 +172,7 @@ public final class VoidResult {
     private boolean success;
     private BigDecimal reversedAmount;
     private List<TenderMovement> cardReversals = new ArrayList<>();
+    private List<TenderMovement> biltRewardsReversals = new ArrayList<>();
     private TenderMovement storedValueReversal;
     private List<TenderAmount> reversedAmountByTender = new ArrayList<>();
     private String poiTransactionId;
@@ -172,6 +188,18 @@ public final class VoidResult {
     public Builder cardReversals(List<TenderMovement> cardReversals) {
       this.cardReversals =
           cardReversals == null ? new ArrayList<>() : new ArrayList<>(cardReversals);
+      return this;
+    }
+
+    public Builder biltRewardsReversals(List<TenderMovement> biltRewardsReversals) {
+      this.biltRewardsReversals =
+          biltRewardsReversals == null ? new ArrayList<>() : new ArrayList<>(biltRewardsReversals);
+      return this;
+    }
+
+    public Builder addBiltRewardsReversal(TenderMovement biltRewardsReversal) {
+      this.biltRewardsReversals.add(
+          Objects.requireNonNull(biltRewardsReversal, "biltRewardsReversal"));
       return this;
     }
 

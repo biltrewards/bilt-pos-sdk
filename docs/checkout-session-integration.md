@@ -409,7 +409,7 @@ When the gift card balance is insufficient, the charge is a partial authorizatio
 
 ### Card payments on the result
 
-`SettlementResult.getCardPayments()` lists every card payment the settlement made, in order, as `CardPaymentResult`s: the amount, POI transaction ID and timestamp, approval code, acquirer transaction ID, payment brand, masked PAN when the terminal reports it, the customer and merchant receipts, and whether the terminal approved less than it was asked for. `getCardAmountCharged()` is their sum. A gift card payment is never a card payment: the stored value payment of a split tender, or of a gift-card-only sale, stays on `getStoredValuePoiTransactionId()`, and a gift-card-only sale has no card payments.
+`SettlementResult.getCardPayments()` lists every card payment the settlement made, in order, as `CardPaymentResult`s: the amount, POI transaction ID and timestamp, approval code, acquirer transaction ID, payment brand, masked PAN when the terminal reports it, the customer and merchant receipts, and whether the terminal approved less than it was asked for. `getCardAmountCharged()` is their sum. A gift card payment is never a card payment: the stored value payment of a split tender, or of a gift-card-only sale, stays on `getStoredValuePoiTransactionId()`, and a gift-card-only sale has no card payments. Bilt rewards the terminal spent inside a payment are not card money either: see [Bilt rewards inside a payment](#variant-bilt-rewards-inside-a-payment-implicit-loyalty).
 
 Without [split card payments](#variant-split-card-payments), `settle()` makes one card payment, so the list holds at most one entry. Registers that print or persist card payments should still read the list: the single-payment getters (`getPoiTransactionId()`, `getApprovalCode()`, `getPaymentBrand()`, `getCustomerReceipt()`, `getMerchantReceipt()` and the like) describe the first card payment only. Where that payment's response lacks a value they keep the stored value payment's, and a gift-card-only sale reports its stored value payment there, as before.
 
@@ -499,6 +499,48 @@ The handler is **not** called:
 - for an authorization of zero, which is a decline.
 
 A decision the settlement cannot carry out (`addToNext()` on the last card payment, an `external()` amount other than `getAmountDue()`) is refused like an invalid `SettlementRecovery`: the settlement fails with `INVALID_STATE`, and the committed card payments stay guarded until `voidTransaction()` or a retried `settle()` reverses them. A handler that throws or returns `null` is reported to `onError` like a throwing step handler: `retry()` asks the handler again, `abort()` unwinds, `abandon()` hands the settlement to the register, and any other recovery is refused.
+
+### Variant: Bilt rewards inside a payment (implicit loyalty)
+
+With `SettlementLoyalty.implicit()`, the terminal can pay part or all of a card payment request with the member's Bilt rewards (points). It reports the rewards as `biltRewardsAmount` in the response's `AdditionalResponse` (see [Make a payment](./make-payment.md#bilt-rewards-inside-a-payment)), and the SDK reports them as their own tender, never as a card payment. A terminal that does not send the key is read as all card, as before.
+
+- **Multi-tender on (the terminal's default): split legs.** The rewards come back as a leg of their own, a `Partial` with no card in it. The existing [partial path](#variant-partial-card-approval) collects the rest: `onPartialCardApproval` is asked, with `PartialCardApproval.isBiltRewards()` true and `getBiltRewardsPayment()` the rewards leg, so tell the shopper "Bilt Rewards paid $40", not "card approved $40". `getCardPayments()` there lists card payments only. Without the handler the SDK sends a card request for the rest; the rewards leg counts as one of the `MAX_AUTOMATIC_CARD_REQUESTS` (3) requests, so at most two card requests follow it. The later card requests are split payments whose `PaidAmount` includes the rewards.
+- **Multi-tender off: one payment.** A single card payment covers rewards and card. `CardPaymentResult.getAmount()` is everything it authorized, `getBiltRewardsAmount()` the rewards part and `getCardAmount()` the card part.
+
+```java
+session.settle(SettlementOptions.builder().loyalty(SettlementLoyalty.implicit()).build())
+    .onPartialCardApproval(partial -> {
+        if (partial.isBiltRewards()) {
+            register.showMessage("Bilt Rewards paid $" + partial.getBiltRewardsAmount()
+                + " — $" + partial.getShortfall() + " still due");
+        }
+        return PartialApprovalDecision.anotherCard();
+    })
+    .onSuccess(result -> {
+        for (BiltRewardsPaymentResult rewards : result.getBiltRewardsPayments()) {
+            journal.recordRewards(rewards.getPoiTransactionId(), rewards.getAmount());
+        }
+        for (CardPaymentResult card : result.getCardPayments()) {
+            journal.recordCard(card.getPoiTransactionId(), card.getCardAmount());
+        }
+    })
+    .execute();
+```
+
+On the result:
+
+| | |
+| --- | --- |
+| `getBiltRewardsPayments()` | The payments the rewards paid in full (`BiltRewardsPaymentResult`: amount, POI transaction ID and timestamp; no card data or receipt). They are not in `getCardPayments()`. |
+| `getBiltRewardsAmount()` | Every rewards payment plus the rewards part of every card payment. |
+| `getCardAmountCharged()` | Card money only: the sum of `getCardAmount()`. |
+| `getAuthorizedAmount()` | Everything the terminal authorized, rewards included. |
+| `getFinalBasket()` | `getCardPaymentTotal()` excludes the rewards, `getBiltRewardsTotal()` holds them. |
+| Single-payment getters | The first card payment's. A sale the rewards paid in full has no card payment and reports its rewards leg there, as a gift-card-only sale reports its gift card. |
+
+`onCardCharged` and `onCardChargeReversed` fire for rewards legs too, since they are the card step's payment requests: the movement's `getBiltRewardsAmount()` tells them apart (equal to `getAmount()` for a rewards leg, the rewards part of a mixed payment, `null` for a card).
+
+`toOriginalSaleRecord()` keeps the rewards legs in `getBiltRewardsPayments()` and a mixed payment's rewards part in `CardPaymentRecord.getBiltRewardsAmount()`. `voidTransaction()` reverses the card payments newest first, then the rewards legs (`ReversalStep.BILT_REWARDS`, the same nexo `ReversalRequest`, which the terminal routes by POI ID). `refund()` refunds the card payments, then the rewards legs. Both report the rewards under `TenderType.BILT_REWARDS`: `VoidResult.getBiltRewardsReversals()`, `RefundResult.getBiltRewardsRefunds()`, and entries in `getReversedAmountByTender()` / `getRefundedAmountByTender()`. A mixed payment's reversal or full refund has two entries with its POI ID, `CARD` for the card part and `BILT_REWARDS` for the rewards part. A partial refund of a mixed payment is split only when the terminal reports `biltRewardsAmount` on the refund; otherwise it is listed as `CARD`. `refund(amount)` is refused on a sale with a card and a rewards leg, as it is with several cards.
 
 ### Variant: skip unavailable loyalty
 
@@ -696,7 +738,8 @@ Every movement of a completed sale can be voided from a fresh process — days l
 
 | Movement | Persist from `SettlementResult` | `OriginalSaleRecord.Builder` fields |
 |---|---|---|
-| Card payments | `getCardPayments()`: each one's `getPoiTransactionId()`, `getPoiTransactionTimestamp()`, `getAmount()` | `addCardPayment(CardPaymentRecord)` / `cardPayments(list)`, in the order they were made |
+| Card payments | `getCardPayments()`: each one's `getPoiTransactionId()`, `getPoiTransactionTimestamp()`, `getAmount()`, `getBiltRewardsAmount()` | `addCardPayment(CardPaymentRecord)` / `cardPayments(list)`, in the order they were made |
+| Bilt rewards payments | `getBiltRewardsPayments()`: each one's `getPoiTransactionId()`, `getPoiTransactionTimestamp()`, `getAmount()` | `addBiltRewardsPayment(BiltRewardsPaymentRecord)` / `biltRewardsPayments(list)` |
 | Stored value (gift card) leg | `getStoredValuePoiTransactionId()` / `getStoredValuePoiTransactionTimestamp()` | `storedValuePoiTransactionId` / `storedValuePoiTransactionTimestamp` |
 | Rebate (coupons) | `getRebatePoiTransactionId()` / `getRebatePoiTransactionTimestamp()` | `rebatePoiTransactionId` / `rebatePoiTransactionTimestamp` |
 | Redemption (points) | `getRedemptionPoiTransactionId()` / `getRedemptionPoiTransactionTimestamp()` | `redemptionPoiTransactionId` / `redemptionPoiTransactionTimestamp` |
@@ -771,7 +814,7 @@ try (TerminalShopperSession session = TerminalShopperSession.builder()
 }
 ```
 
-`RefundAllocation.card(amount, originalSale)` targets the record's card payment, so it needs a record with exactly one; with several it throws `IllegalArgumentException`. Pick the card payments to return to and add one `RefundAllocation.card(amount, poiTransactionId, timestamp)` for each:
+`RefundAllocation.card(amount, originalSale)` targets the record's card payment, so it needs a record with exactly one; with several it throws `IllegalArgumentException`. Bilt rewards payments are not card payments: a sale paid only with rewards has no card leg, and its rewards go back with `RefundAllocation.biltRewards(amount, originalSale)` or `biltRewards(amount, BiltRewardsPaymentRecord)`, the same terminal refund reported as `getBiltRewardsRefundedAmount()` instead of `getCardRefundedAmount()`. Pick the card payments to return to and add one `RefundAllocation.card(amount, poiTransactionId, timestamp)` for each:
 
 ```java
 for (CardPaymentRecord card : originalSale.getCardPayments()) {
